@@ -4,8 +4,8 @@ MiniCPM5 Librarian is a search llm agent based on MiniCPM5-2B, indented to be us
 ## Privacy and Transparency
 MiniCPM5-Librarian prioritizes searching your own "study_cards" folder first, and you are encouraged to create study_cards for often searched subjects, MiniCPM5-Librarian uses the privacy focused search engines: [Brave Search](https://search.brave.com/) and [DuckDuckGo](https://duckduckgo.com/) when searching online and by default your data is not sent to any AI provider, and the answer to your query is processed locally on your machine. each step the agent took to reach the answer is also presented in a flow-chart along with sources. 
 
-[## Images](https://github.com/Rumidom/MiniCPM5-Librarian/blob/main/images/Screenshot_2026-11-10%2018-32-48.png)
-[## Images](https://github.com/Rumidom/MiniCPM5-Librarian/blob/main/images/Screenshot_2026-11-10%2018-33-34.png)
+![alt text](https://github.com/Rumidom/MiniCPM5-Librarian/blob/main/images/Screenshot_2026-11-10%2018-33-34.png)
+![alt text](https://github.com/Rumidom/MiniCPM5-Librarian/blob/main/images/Screenshot_2026-11-10%2018-32-48.png)
 
 ## Install
 
