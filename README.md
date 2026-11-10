@@ -11,5 +11,8 @@ MiniCPM5-Librarian prioritizes searching your own "study_cards" folder first, an
 ### Linux
 run ```run.sh``` then access [http://127.0.0.1:5000/](http://127.0.0.1:5000/) on your browser.
 
+### Windows
+run ```run.bat``` then access [http://127.0.0.1:5000/](http://127.0.0.1:5000/) on your browser.
+
 ## License
 MiniCPM5-Librarian was made using GLM 4.6(Big Pickle) and is MIT licensed

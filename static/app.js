@@ -1,18 +1,9 @@
-function readStudyCardsFirst() {
-  try {
-    const saved = localStorage.getItem("studyCardsFirst");
-    return saved === null ? true : saved === "true";
-  } catch {
-    return true;
-  }
-}
-
 const state = {
   conversation: [],
   busy: false,
   healthTimer: null,
   lastResult: null,
-  searchStudyCardsFirst: readStudyCardsFirst(),
+  searchStudyCardsFirst: true,
 };
 
 const els = {
@@ -651,11 +642,6 @@ els.traceScroll.addEventListener("change", (event) => {
   const input = event.target.closest("#studyCardsFirst");
   if (!input) return;
   state.searchStudyCardsFirst = input.checked;
-  try {
-    localStorage.setItem("studyCardsFirst", String(input.checked));
-  } catch {
-    // Ignore storage failures; the toggle still works for this session.
-  }
   const hint = input.closest(".switch-row")?.querySelector(".switch-hint");
   if (hint) {
     hint.textContent = input.checked
