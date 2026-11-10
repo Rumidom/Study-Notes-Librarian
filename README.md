@@ -8,6 +8,8 @@ MiniCPM5-Librarian prioritizes searching your own "study_cards" folder first, an
 ![alt text](https://github.com/Rumidom/MiniCPM5-Librarian/blob/main/images/Screenshot_2026-11-10%2018-32-48.png)
 
 ## Install
+### Linux
+run ```run.sh```
 
 ## License
 MiniCPM5-Librarian was made using GLM 4.6(Big Pickle) and is MIT licensed
