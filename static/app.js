@@ -24,6 +24,7 @@ const els = {
   cardMarkdown: document.getElementById("cardMarkdown"),
   cardPreview: document.getElementById("cardPreview"),
   cardFolder: document.getElementById("cardFolder"),
+  cardName: document.getElementById("cardName"),
   cardSaveBtn: document.getElementById("cardSaveBtn"),
   cardSaveStatus: document.getElementById("cardSaveStatus"),
   cardBrowserPanel: document.getElementById("cardBrowserPanel"),
@@ -730,7 +731,7 @@ els.cardSaveBtn.addEventListener("click", async () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         content: els.cardMarkdown.value,
-        name: state.cardName,
+        name: els.cardName.value,
         folder: els.cardFolder.value.trim() || null,
       }),
     });
@@ -738,6 +739,7 @@ els.cardSaveBtn.addEventListener("click", async () => {
     if (!response.ok) throw new Error(data.error || `Save failed (${response.status}).`);
     state.cardName = data.name;
     //setCardStatus("");
+    //console.log(decodeURIComponent(data.path));
     setTopbarNote(`Saved to ${data.name}`, `Saved to ${decodeURIComponent(data.path)}`);
     loadCardBrowser();
   } catch (error) {
@@ -836,6 +838,7 @@ async function loadCardIntoEditor(card, button) {
     renderCardPreview();
     state.cardName = card.name;
     els.cardFolder.value = card.folder || "";
+    els.cardName.value = card.name || "";
     els.cardBrowserList
       .querySelectorAll(".card-browser-item.active")
       .forEach((item) => item.classList.remove("active"));

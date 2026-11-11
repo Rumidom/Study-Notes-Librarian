@@ -467,6 +467,27 @@ button {
   color: var(--muted-2);
 }
 
+.card-name-input {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: rgba(23, 19, 16, 0.65);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 12px;
+  outline: none;
+  transition: border-color 160ms ease;
+}
+
+.card-name-input:focus {
+  border-color: var(--line-strong);
+}
+
+.card-name-input::placeholder {
+  color: var(--muted-2);
+}
+
 .card-editor-note {
   margin: 0;
   color: var(--muted-2);
