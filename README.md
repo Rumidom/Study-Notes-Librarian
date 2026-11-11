@@ -10,7 +10,7 @@ Study-Notes-Librarian prioritizes searching your "study_cards" folder first, you
 ## TODO
 - [x] Add study card editor
 - [x] Add configuration page
-- [ ] Add card browser to card editor
+- [x] Add card browser to card editor
 
 ## Install
 Get a free Brave Search API key here: https://brave.com/search/api/. Brave Search wont work without this.
