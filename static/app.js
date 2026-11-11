@@ -11,6 +11,8 @@ const els = {
   chatScroll: document.getElementById("chatScroll"),
   traceScroll: document.getElementById("traceScroll"),
   traceTime: document.getElementById("traceTime"),
+  topbarNote: document.getElementById("topbarNote"),
+  traceTitle: document.getElementById("traceTitle"),
   prompt: document.getElementById("prompt"),
   composer: document.getElementById("composer"),
   sendBtn: document.getElementById("sendBtn"),
@@ -24,6 +26,9 @@ const els = {
   cardFolder: document.getElementById("cardFolder"),
   cardSaveBtn: document.getElementById("cardSaveBtn"),
   cardSaveStatus: document.getElementById("cardSaveStatus"),
+  cardBrowserPanel: document.getElementById("cardBrowserPanel"),
+  cardBrowserStatus: document.getElementById("cardBrowserStatus"),
+  cardBrowserList: document.getElementById("cardBrowserList"),
   requestMeta: document.getElementById("requestMeta"),
   modelStatus: document.getElementById("modelStatus"),
   statusText: document.getElementById("statusText"),
@@ -679,7 +684,13 @@ function setActiveTab(tab) {
   els.conversationView.hidden = !showConversation;
   els.cardEditorView.hidden = showConversation;
   els.clearBtn.hidden = !showConversation;
-  if (!showConversation) renderCardPreview();
+  els.traceTitle.textContent = showConversation ? "Agent Trace" : "Card Browser";
+  els.traceScroll.hidden = !showConversation;
+  els.cardBrowserPanel.hidden = showConversation;
+  if (!showConversation) {
+    renderCardPreview();
+    loadCardBrowser();
+  }
 }
 
 els.tabConversation.addEventListener("click", () => setActiveTab("conversation"));
@@ -697,20 +708,22 @@ function renderCardPreview() {
   enhanceCodeBlocks(els.cardPreview);
 }
 
-function setCardStatus(text, kind) {
-  els.cardSaveStatus.textContent = text || "";
-  els.cardSaveStatus.className = `card-editor-status${kind ? ` ${kind}` : ""}`;
-}
+//function setCardStatus(text, kind) {
+//  els.cardSaveStatus.textContent = text || "";
+//  els.cardSaveStatus.className = `card-editor-status${kind ? ` ${kind}` : ""}`;
+//}
 
 els.cardMarkdown.addEventListener("input", renderCardPreview);
 
 els.cardSaveBtn.addEventListener("click", async () => {
   if (!els.cardMarkdown.value.trim()) {
-    setCardStatus("Nothing to save yet.", "error");
+    //setCardStatus("Nothing to save yet.", "error");
+    setTopbarNote("Nothing to save yet.", "error");
     return;
   }
   els.cardSaveBtn.disabled = true;
-  setCardStatus("Saving…");
+  //setCardStatus("Saving…");
+  setTopbarNote("Saving…");
   try {
     const response = await fetch("/api/study-card", {
       method: "POST",
@@ -724,13 +737,114 @@ els.cardSaveBtn.addEventListener("click", async () => {
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data.error || `Save failed (${response.status}).`);
     state.cardName = data.name;
-    setCardStatus(`Saved to ${data.path}`, "ok");
+    //setCardStatus("");
+    setTopbarNote(`Saved to ${data.name}`, `Saved to ${decodeURIComponent(data.path)}`);
+    loadCardBrowser();
   } catch (error) {
-    setCardStatus(error.message || "Save failed.", "error");
+    setTopbarNote(error.message || "Save failed.", "error");
+    //setCardStatus(error.message || "Save failed.", "error");
   } finally {
     els.cardSaveBtn.disabled = false;
   }
 });
+
+let topbarNoteTimer = null;
+
+function setTopbarNote(text, title) {
+  clearTimeout(topbarNoteTimer);
+  els.topbarNote.textContent = text || "";
+  els.topbarNote.title = title || text || "";
+  els.topbarNote.hidden = !text;
+  if (text) {
+    topbarNoteTimer = setTimeout(() => {
+      els.topbarNote.hidden = true;
+    }, 6000);
+  }
+}
+
+function setCardBrowserStatus(text, kind) {
+  els.cardBrowserStatus.hidden = !text;
+  els.cardBrowserStatus.textContent = text || "";
+  els.cardBrowserStatus.className = `card-browser-status${kind ? ` ${kind}` : ""}`;
+}
+
+async function loadCardBrowser() {
+  els.cardBrowserList.innerHTML = "";
+  setCardBrowserStatus("Loading cards…");
+  try {
+    const response = await fetch("/api/study-cards");
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || `Could not load cards (${response.status}).`);
+    renderCardBrowser(
+      Array.isArray(data.cards) ? data.cards : [],
+      Array.isArray(data.folders) ? data.folders : []
+    );
+  } catch (error) {
+    els.cardBrowserList.innerHTML = "";
+    setCardBrowserStatus(error.message || "Could not load cards.", "error");
+  }
+}
+
+function renderCardBrowser(cards, folders) {
+  els.cardBrowserList.innerHTML = "";
+  if (!cards.length && !folders.length) {
+    setCardBrowserStatus("No markdown cards yet. Save one from the editor.");
+    return;
+  }
+  setCardBrowserStatus("");
+
+  const groups = new Map();
+  groups.set("", []);
+  for (const folder of folders) {
+    if (!groups.has(folder)) groups.set(folder, []);
+  }
+  for (const card of cards) {
+    const key = card.folder || "";
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(card);
+  }
+
+  [...groups.keys()]
+    .sort((a, b) => (a === "" ? -1 : b === "" ? 1 : a.localeCompare(b)))
+    .forEach((folder) => {
+      const group = document.createElement("div");
+      group.className = "card-browser-group";
+      const head = document.createElement("div");
+      head.className = "card-browser-folder";
+      head.textContent = folder || "study_cards/";
+      group.appendChild(head);
+      groups.get(folder).forEach((card) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "card-browser-item";
+        button.dataset.path = card.path;
+        button.innerHTML =
+          '<span class="card-browser-dot" aria-hidden="true"></span>' +
+          `<span class="card-browser-name">${escapeHtml(card.name)}</span>`;
+        button.addEventListener("click", () => loadCardIntoEditor(card, button));
+        group.appendChild(button);
+      });
+      els.cardBrowserList.appendChild(group);
+    });
+}
+
+async function loadCardIntoEditor(card, button) {
+  try {
+    const response = await fetch(card.url);
+    if (!response.ok) throw new Error(`Could not open ${card.name} (${response.status}).`);
+    els.cardMarkdown.value = await response.text();
+    renderCardPreview();
+    state.cardName = card.name;
+    els.cardFolder.value = card.folder || "";
+    els.cardBrowserList
+      .querySelectorAll(".card-browser-item.active")
+      .forEach((item) => item.classList.remove("active"));
+    button.classList.add("active");
+    setTopbarNote(`Loaded ${card.name}`, `Loaded ${card.path}`);
+  } catch (error) {
+    setCardBrowserStatus(error.message || "Could not open card.", "error");
+  }
+}
 
 function setSettingsStatus(text, kind) {
   els.settingsStatus.textContent = text || "";

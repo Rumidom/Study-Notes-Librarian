@@ -152,6 +152,18 @@ button {
   gap: 10px;
 }
 
+.topbar-note {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 34ch;
+  overflow: hidden;
+  color: var(--ok);
+  font-family: var(--mono);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .status-pill {
   display: flex;
   align-items: center;
@@ -826,6 +838,91 @@ button {
 
 .trace-scroll {
   padding: 16px;
+}
+
+.card-browser-panel {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(214, 192, 168, 0.23) transparent;
+}
+
+.card-browser-panel[hidden] {
+  display: none;
+}
+
+.card-browser-status {
+  margin: 0 0 12px;
+  color: var(--muted-2);
+  font-size: 12.5px;
+  font-style: italic;
+}
+
+.card-browser-status.ok {
+  color: var(--ok);
+  font-style: normal;
+}
+
+.card-browser-status.error {
+  color: var(--danger);
+  font-style: normal;
+}
+
+.card-browser-group {
+  margin-bottom: 14px;
+}
+
+.card-browser-folder {
+  margin: 0 0 6px;
+  padding: 0 4px;
+  color: var(--muted-2);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+}
+
+.card-browser-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+  transition: 160ms ease;
+}
+
+.card-browser-item:hover {
+  border-color: var(--line);
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+.card-browser-item.active {
+  border-color: var(--line);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.card-browser-dot {
+  flex: 0 0 auto;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.5;
+}
+
+.card-browser-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .trace-block {
@@ -1559,6 +1656,10 @@ button {
   .status-pill {
     max-width: 48vw;
   }
+
+  .topbar-note {
+    max-width: 24ch;
+  }
 }
 
 @media (max-width: 620px) {
@@ -1581,6 +1682,10 @@ button {
     max-width: 42vw;
     padding: 7px 9px;
     font-size: 10.5px;
+  }
+
+  .topbar-note {
+    max-width: 16ch;
   }
 
   .panel-head {

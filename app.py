@@ -282,6 +282,42 @@ def _card_folders() -> list[str]:
         return []
 
 
+def _valid_card_name(name: str) -> bool:
+    if not name or len(name) > 200 or name.startswith(".") or not name.lower().endswith(".md"):
+        return False
+    if "/" in name or "\\" in name or "\x00" in name:
+        return False
+    return not any(ord(char) < 32 for char in name)
+
+
+@app.get("/api/study-cards")
+def list_study_cards():
+    root = tools.STUDY_CARDS_DIR
+    cards = []
+    try:
+        if root.is_dir():
+            for path in root.rglob("*"):
+                if not path.is_file() or path.suffix.lower() != ".md":
+                    continue
+                relative = path.relative_to(root)
+                if any(part.startswith(".") for part in relative.parts):
+                    continue
+                rel = relative.as_posix()
+                folder = relative.parent.as_posix()
+                cards.append(
+                    {
+                        "name": path.name,
+                        "folder": "" if folder == "." else folder,
+                        "path": rel,
+                        "url": f"/study_cards/{quote(rel)}",
+                    }
+                )
+    except OSError:
+        pass
+    cards.sort(key=lambda card: card["path"].lower())
+    return jsonify({"cards": cards, "folders": _card_folders()})
+
+
 @app.post("/api/study-card")
 def save_study_card():
     payload = request.get_json(silent=True) or {}
@@ -316,7 +352,7 @@ def save_study_card():
     try:
         target_dir.mkdir(parents=True, exist_ok=True)
         if name:
-            if not re.fullmatch(r"[a-z0-9][a-z0-9._-]*\.md", name) or Path(name).name != name:
+            if not _valid_card_name(name):
                 return jsonify({"error": "Invalid card file name."}), 400
             path = target_dir / name
         else:

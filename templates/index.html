@@ -24,6 +24,7 @@
         </div>
       </div>
       <div class="topbar-right">
+        <span class="topbar-note" id="topbarNote" role="status" hidden></span>
         <div class="status-pill" id="modelStatus" data-state="checking">
           <span class="status-dot" aria-hidden="true"></span>
           <span id="statusText">Checking model…</span>
@@ -110,7 +111,7 @@
       <aside class="panel trace-panel" aria-label="Agent trace">
         <div class="panel-head trace-head">
           <div>
-            <span class="eyebrow">Agent Trace</span>
+            <span class="eyebrow" id="traceTitle">Agent Trace</span>
           </div>
           <span class="trace-time" id="traceTime">—</span>
         </div>
@@ -136,6 +137,11 @@
               </span>
             </label>
           </div>
+        </div>
+
+        <div class="card-browser-panel" id="cardBrowserPanel" hidden>
+          <p class="card-browser-status" id="cardBrowserStatus">Loading cards…</p>
+          <div class="card-browser-list" id="cardBrowserList"></div>
         </div>
       </aside>
     </main>
