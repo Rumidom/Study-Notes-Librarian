@@ -1,13 +1,13 @@
+#!/usr/bin/env python3
 from __future__ import annotations
-
 import os
 import time
 from pathlib import Path
 from typing import Callable
-
 import requests
+import sys
 
-BASE_DIR = Path(__file__).resolve().parent
+BASE_DIR = Path(__file__).parents[1]
 MODEL_REPO = os.getenv("MODEL_REPO", "openbmb/MiniCPM5-2B-GGUF")
 MODEL_FILE = os.getenv("MODEL_FILE", "MiniCPM5-2B-Q4_K_M.gguf")
 MODEL_DIR = Path(os.getenv("MODEL_DIR", str(BASE_DIR / "models")))
@@ -43,7 +43,7 @@ def ensure_model(progress: Progress | None = None) -> Path:
 
     if not AUTO_DOWNLOAD:
         raise FileNotFoundError(
-            f"Model not found at {MODEL_PATH}. Run scripts/download_model.py or set AUTO_DOWNLOAD=1."
+            f"Model not found at {MODEL_PATH}. Run scripts/download&check_model.py or set AUTO_DOWNLOAD=1."
         )
 
     MODEL_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -77,3 +77,33 @@ def ensure_model(progress: Progress | None = None) -> Path:
 
     part.replace(MODEL_PATH)
     return MODEL_PATH
+
+
+def progress(done: int, total: int) -> None:
+    if total:
+        percent = done * 100 / total
+        sys.stdout.write(f"\r{percent:5.1f}%  {done / 1e9:.2f}/{total / 1e9:.2f} GB")
+    else:
+        sys.stdout.write(f"\r{done / 1e9:.2f} GB")
+    sys.stdout.flush()
+
+
+def main() -> int:
+    if model_ready():
+        print(f"Model ready: {MODEL_PATH}")
+        return 0
+
+    print(f"Downloading MiniCPM5-2B to {MODEL_PATH}")
+    try:
+        ensure_model(progress)
+    except Exception as exc:
+        print(f"\nDownload failed: {exc}")
+        return 1
+
+    print(f"\nModel ready: {MODEL_PATH}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+

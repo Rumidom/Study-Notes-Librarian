@@ -15,6 +15,6 @@ if [ ! -f .venv/.installed ]; then
   touch .venv/.installed
 fi
 
-"$VENV_PY" scripts/download_model.py
+"$VENV_PY" scripts/download_and_check_model.py
 
 exec "$VENV_PY" app.py

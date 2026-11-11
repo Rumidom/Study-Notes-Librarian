@@ -1,10 +1,7 @@
 from __future__ import annotations
-
 import os
 import re
 import time
-
-from llm import LLMError
 from tools import SearchHit, search_study_cards, search_web
 
 SMALLTALK_RE = re.compile(
@@ -31,6 +28,17 @@ NO_SEARCH_RE = re.compile(
     r"^(what is 2\s*\+\s*2|say hello|tell me a joke|how are you|what's up)\b",
     re.IGNORECASE,
 )
+
+THINK_RE = re.compile(r"<think>.*?</think>", re.S)
+OPEN_THINK_RE = re.compile(r"<think>.*", re.S)
+SPECIAL_RE = re.compile(r"<\|im_(?:start|end)\|>")
+
+def clean_model_text(text: str) -> str:
+    text = SPECIAL_RE.sub("", text or "")
+    text = THINK_RE.sub("", text)
+    text = OPEN_THINK_RE.sub("", text)
+    text = text.replace("<|im_end|>", "").strip()
+    return text
 
 ANSWER_SYSTEM = """You are study notes librarian, a concise technical assistant powered by MiniCPM5-2B running locally on the user's machine.
 
@@ -201,11 +209,10 @@ class Agent:
         local_hits: list[SearchHit] = []
 
         if do_search:
-            plan = (
-                "Check study_cards first, then the web if needed"
-                if search_study_cards_first
-                else "Search the web directly; study_cards lookup is off"
-            )
+            if search_study_cards_first:
+                plan = "Check study_cards first, then the web if needed"
+            else:
+                plan = "Search the web directly; study_cards lookup is off"
             steps.append(
                 _step(
                     "plan",
@@ -402,7 +409,7 @@ class Agent:
         else:
             temperature = 0.25 if CODE_RE.search(message) else 0.4
             try:
-                answer = self.llm.chat(messages, temperature=temperature, max_tokens=350, timeout=240)
+                answer = self.llm.create_chat_completion(messages, temperature=temperature, max_tokens=350)
                 steps.append(
                     _step(
                         "answer",
@@ -427,7 +434,7 @@ class Agent:
                 {
                     "name": "minicpm5-2b",
                     "label": "MiniCPM5-2B",
-                    "detail": "fallback answer" if llm_failed else "answer synthesis",
+                    "detail": "fallback answer" if llm_failed else "answer assembly",
                     "status": "failed" if llm_failed else "done",
                 }
             )
@@ -445,6 +452,9 @@ class Agent:
             "llm_failed": llm_failed,
             "search_study_cards_first": search_study_cards_first,
         }
+
+    def get_health():
+        pass
 
     @staticmethod
     def _engine_detail(info: dict) -> str:

@@ -24,7 +24,7 @@ if not exist ".venv\.installed" (
   type nul > ".venv\.installed"
 )
 
-"%VENV_PY%" scripts\download_model.py
+"%VENV_PY%" scripts\download_and_check_model.py
 if errorlevel 1 goto :error
 
 "%VENV_PY%" app.py

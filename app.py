@@ -5,6 +5,7 @@ import re
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import quote
+from llama_cpp import Llama
 
 try:
     from dotenv import load_dotenv, set_key
@@ -17,12 +18,17 @@ from flask import Flask, jsonify, render_template, request, send_from_directory
 
 import tools
 from agent import Agent
-from llm import LocalLlamaClient
 
 BASE_DIR = Path(__file__).resolve().parent
 ENV_PATH = BASE_DIR / ".env"
 
-llm_client = LocalLlamaClient()
+llama_cpp.llama_backend_init()
+
+llm_client = Llama(
+      model_path="models/MiniCPM5-2B-Q4_K_M.gguf",
+      chat_format="llama-2"
+)
+
 agent = Agent(llm_client)
 
 app = Flask(__name__)
@@ -242,10 +248,9 @@ def _apply_live_config() -> None:
 
 @app.get("/")
 def index():
-    llm_client.start()
     return render_template(
         "index.html",
-        model=getattr(llm_client, "model", "MiniCPM5-2B"),
+        model = "MiniCPM5-2B", # this should get name from agent
         card_folders=_card_folders(),
     )
 
@@ -372,12 +377,6 @@ def save_study_card():
     return jsonify({"ok": True, "name": path.name, "path": f"/study_cards/{quote(relative)}"})
 
 
-@app.get("/api/health")
-def health():
-    llm_client.ensure_started()
-    return jsonify(llm_client.health())
-
-
 @app.get("/api/config")
 def get_config():
     groups = []
@@ -401,6 +400,10 @@ def get_config():
         }
     )
 
+@app.post("/api/health")
+def get_health():
+    agent.ensure_started()
+    return jsonify(agent.health())
 
 @app.post("/api/config")
 def save_config():
@@ -477,3 +480,6 @@ if __name__ == "__main__":
     port = int(os.getenv("FLASK_RUN_PORT", "5000"))
     debug = os.getenv("FLASK_DEBUG", "0").strip().lower() in {"1", "true", "yes"}
     app.run(host=host, port=port, debug=debug, threaded=True)
+
+
+

@@ -22,11 +22,7 @@ BASE_DIR = Path(__file__).resolve().parent
 _STUDY_DIR = Path(os.getenv("STUDY_CARDS_DIR", "study_cards"))
 STUDY_CARDS_DIR = _STUDY_DIR if _STUDY_DIR.is_absolute() else BASE_DIR / _STUDY_DIR
 STUDY_CARD_MAX_BYTES = int(os.getenv("STUDY_CARD_MAX_BYTES", str(1024 * 1024)))
-STUDY_CARD_SUFFIXES = {
-    ".md", ".markdown", ".txt", ".text", ".rst", ".org", ".csv", ".json",
-    ".yaml", ".yml", ".py", ".js", ".ts", ".tsx", ".jsx", ".html", ".css",
-    ".c", ".h", ".cpp", ".hpp", ".java", ".rs", ".go", ".sql", ".sh",
-}
+
 STUDY_STOPWORDS = {
     "a", "an", "the", "i", "you", "me", "my", "we", "our", "it", "this",
     "that", "is", "are", "was", "were", "be", "been", "being", "do", "does",
@@ -102,7 +98,7 @@ def _iter_study_cards(root: Path):
             continue
         if any(part.startswith(".") for part in relative.parts):
             continue
-        if path.suffix.lower() not in STUDY_CARD_SUFFIXES:
+        if path.suffix.lower() not ".md":
             continue
         yield path, relative
 

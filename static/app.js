@@ -546,7 +546,7 @@ async function sendMessage(value) {
     const meta = [
       `${result.sources?.length || 0} sources`,
       `${seconds}s`,
-      result.llm_failed ? "fallback" : result.model || "MiniCPM5-2B",
+      result.llm_failed ? "fallback" : result.model_name || "MiniCPM5-2B",
     ];
     addMessage("assistant", result.answer, { sources: result.sources || [], meta });
     state.conversation.push({ role: "assistant", content: result.answer });
