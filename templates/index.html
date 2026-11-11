@@ -28,12 +28,7 @@
           <span class="status-dot" aria-hidden="true"></span>
           <span id="statusText">Checking model…</span>
         </div>
-        <button class="icon-btn" id="settingsBtn" type="button" aria-label="Open settings" title="Settings">
-          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" aria-hidden="true">
-            <circle cx="12" cy="12" r="3"/>
-            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.08a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.08a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.08a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-        </button>
+        <button class="ghost-btn" id="settingsBtn" type="button">Settings</button>
       </div>
     </header>
 
@@ -83,15 +78,25 @@
         </div>
 
         <div class="trace-scroll" id="traceScroll">
-          <div class="trace-empty" id="traceEmpty">
-            <div class="empty-orbit" aria-hidden="true">
-              <span class="orbit-node node-a"></span>
-              <span class="orbit-node node-b"></span>
-              <span class="orbit-node node-c"></span>
-              <span class="orbit-core">ML</span>
+          <div class="trace-block">
+            <div class="block-head">
+              <h3>Idle</h3>
+              <span class="block-count">—</span>
             </div>
-            <h3>No trail yet</h3>
-            <p>Ask a question to see the plan, study-card matches, searches, pages read, tools used, and sources in a step-by-step flow.</p>
+            <p class="summary-text">No trace yet.</p>
+          </div>
+
+          <div class="trace-block toggle-block">
+            <label class="switch-row" for="studyCardsFirst">
+              <span class="switch-copy">
+                <span class="switch-title">Search study cards first</span>
+                <span class="switch-hint">Local cards are checked before the web.</span>
+              </span>
+              <span class="switch">
+                <input type="checkbox" id="studyCardsFirst" role="switch" checked>
+                <span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span>
+              </span>
+            </label>
           </div>
         </div>
       </aside>
