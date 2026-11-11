@@ -14,17 +14,17 @@ Study-Notes-Librarian prioritizes searching your "study_cards" folder first, you
 ## Install
 Get a free Brave Search API key here: https://brave.com/search/api/. Brave Search wont work without this.
 
-### Linux
+#### Linux
 Run ```run.sh``` then access [http://127.0.0.1:5000/](http://127.0.0.1:5000/) on your browser. 
 
-### Windows
+#### Windows
 Run ```run.bat``` then access [http://127.0.0.1:5000/](http://127.0.0.1:5000/) on your browser.
 
-## Settings
+#### Settings
 On the upper right corner click on settings, add your Brave Search API key then click on save changes.
 
-### Configuration File
-if you need to configure the configuration file manually, Rename ```.env.example``` to ```.env``` open the file and add your brave 
+#### Configuration File
+if you need to edit the configuration file manually,  open the file ```.env``` on a text editor.
 
 ## License
 Study-Notes-Librarian was made using GLM 4.6(Big Pickle) and is MIT licensed
