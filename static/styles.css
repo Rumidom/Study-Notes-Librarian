@@ -250,6 +250,219 @@ button {
   letter-spacing: -0.01em;
 }
 
+.chat-head {
+  align-items: center;
+}
+
+.panel-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: rgba(44, 36, 29, 0.45);
+}
+
+.panel-tab {
+  padding: 6px 13px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: 160ms ease;
+}
+
+.panel-tab:hover {
+  color: var(--text);
+}
+
+.panel-tab.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.panel-tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.chat-view {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.chat-view[hidden],
+.card-editor-view[hidden] {
+  display: none;
+}
+
+.card-editor-view {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.card-editor-split {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 1px minmax(0, 1fr);
+}
+
+.card-editor-pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  padding: 0 16px 14px;
+}
+
+.card-pane-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 13px 1px 10px;
+  color: var(--muted-2);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.card-pane-hint {
+  color: var(--muted-2);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: none;
+}
+
+.card-editor-divider {
+  background: var(--line);
+}
+
+.card-editor-input {
+  flex: 1 1 auto;
+  min-height: 0;
+  box-sizing: border-box;
+  width: 100%;
+  padding: 13px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(23, 19, 16, 0.65);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.65;
+  resize: none;
+  outline: none;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(214, 192, 168, 0.23) transparent;
+  transition: border-color 160ms ease;
+}
+
+.card-editor-input:focus {
+  border-color: var(--line-strong);
+}
+
+.card-editor-preview {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 13px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(38, 31, 25, 0.55);
+  scrollbar-width: thin;
+  scrollbar-color: rgba(214, 192, 168, 0.23) transparent;
+}
+
+.card-preview-empty {
+  margin: 0;
+  color: var(--muted-2);
+  font-size: 12.5px;
+  font-style: italic;
+}
+
+.card-editor-foot {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 12px;
+  padding: 11px 16px;
+  border-top: 1px solid var(--line);
+}
+
+.card-editor-status {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.card-editor-status.ok {
+  color: var(--ok);
+}
+
+.card-editor-status.error {
+  color: var(--danger);
+}
+
+.card-editor-folder {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.card-folder-label {
+  color: var(--muted-2);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.card-folder-input {
+  width: 230px;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: rgba(23, 19, 16, 0.65);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 12px;
+  outline: none;
+  transition: border-color 160ms ease;
+}
+
+.card-folder-input:focus {
+  border-color: var(--line-strong);
+}
+
+.card-folder-input::placeholder {
+  color: var(--muted-2);
+}
+
+.card-editor-note {
+  margin: 0;
+  color: var(--muted-2);
+  font-size: 10.5px;
+  letter-spacing: 0.02em;
+  line-height: 1.4;
+}
+
 .ghost-btn {
   padding: 7px 11px;
   border: 1px solid var(--line);
@@ -1330,6 +1543,11 @@ button {
     min-height: min(76dvh, 760px);
   }
 
+  .card-editor-split {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(0, 1fr) 1px minmax(0, 1fr);
+  }
+
   .trace-panel {
     min-height: 340px;
   }
@@ -1391,6 +1609,15 @@ button {
 
   .trace-scroll {
     padding: 14px;
+  }
+
+  .card-editor-folder {
+    flex: 1 1 100%;
+  }
+
+  .card-folder-input {
+    flex: 1 1 auto;
+    width: auto;
   }
 
   .settings-overlay {

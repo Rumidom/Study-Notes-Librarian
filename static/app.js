@@ -4,6 +4,7 @@ const state = {
   healthTimer: null,
   lastResult: null,
   searchStudyCardsFirst: true,
+  cardName: null,
 };
 
 const els = {
@@ -14,6 +15,15 @@ const els = {
   composer: document.getElementById("composer"),
   sendBtn: document.getElementById("sendBtn"),
   clearBtn: document.getElementById("clearBtn"),
+  tabConversation: document.getElementById("tabConversation"),
+  tabCardEditor: document.getElementById("tabCardEditor"),
+  conversationView: document.getElementById("conversationView"),
+  cardEditorView: document.getElementById("cardEditorView"),
+  cardMarkdown: document.getElementById("cardMarkdown"),
+  cardPreview: document.getElementById("cardPreview"),
+  cardFolder: document.getElementById("cardFolder"),
+  cardSaveBtn: document.getElementById("cardSaveBtn"),
+  cardSaveStatus: document.getElementById("cardSaveStatus"),
   requestMeta: document.getElementById("requestMeta"),
   modelStatus: document.getElementById("modelStatus"),
   statusText: document.getElementById("statusText"),
@@ -659,6 +669,68 @@ els.traceScroll.addEventListener("change", (event) => {
 });
 
 els.clearBtn.addEventListener("click", clearChat);
+
+function setActiveTab(tab) {
+  const showConversation = tab === "conversation";
+  els.tabConversation.classList.toggle("active", showConversation);
+  els.tabConversation.setAttribute("aria-selected", String(showConversation));
+  els.tabCardEditor.classList.toggle("active", !showConversation);
+  els.tabCardEditor.setAttribute("aria-selected", String(!showConversation));
+  els.conversationView.hidden = !showConversation;
+  els.cardEditorView.hidden = showConversation;
+  els.clearBtn.hidden = !showConversation;
+  if (!showConversation) renderCardPreview();
+}
+
+els.tabConversation.addEventListener("click", () => setActiveTab("conversation"));
+els.tabCardEditor.addEventListener("click", () => setActiveTab("cardeditor"));
+
+const CARD_PREVIEW_EMPTY = '<p class="card-preview-empty">Rendered Markdown appears here.</p>';
+
+function renderCardPreview() {
+  const raw = els.cardMarkdown.value;
+  if (!raw.trim()) {
+    els.cardPreview.innerHTML = CARD_PREVIEW_EMPTY;
+    return;
+  }
+  els.cardPreview.innerHTML = renderMarkdown(raw);
+  enhanceCodeBlocks(els.cardPreview);
+}
+
+function setCardStatus(text, kind) {
+  els.cardSaveStatus.textContent = text || "";
+  els.cardSaveStatus.className = `card-editor-status${kind ? ` ${kind}` : ""}`;
+}
+
+els.cardMarkdown.addEventListener("input", renderCardPreview);
+
+els.cardSaveBtn.addEventListener("click", async () => {
+  if (!els.cardMarkdown.value.trim()) {
+    setCardStatus("Nothing to save yet.", "error");
+    return;
+  }
+  els.cardSaveBtn.disabled = true;
+  setCardStatus("Saving…");
+  try {
+    const response = await fetch("/api/study-card", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        content: els.cardMarkdown.value,
+        name: state.cardName,
+        folder: els.cardFolder.value.trim() || null,
+      }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || `Save failed (${response.status}).`);
+    state.cardName = data.name;
+    setCardStatus(`Saved to ${data.path}`, "ok");
+  } catch (error) {
+    setCardStatus(error.message || "Save failed.", "error");
+  } finally {
+    els.cardSaveBtn.disabled = false;
+  }
+});
 
 function setSettingsStatus(text, kind) {
   els.settingsStatus.textContent = text || "";

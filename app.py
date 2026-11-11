@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import os
+import re
+from datetime import datetime
 from pathlib import Path
+from urllib.parse import quote
 
 try:
     from dotenv import load_dotenv, set_key
@@ -243,12 +246,92 @@ def index():
     return render_template(
         "index.html",
         model=getattr(llm, "model", "MiniCPM5-2B"),
+        card_folders=_card_folders(),
     )
 
 
 @app.get("/study_cards/<path:filename>")
 def study_card(filename: str):
     return send_from_directory(str(tools.STUDY_CARDS_DIR), filename)
+
+
+def _card_slug(content: str) -> str:
+    for line in content.splitlines():
+        stripped = line.lstrip()
+        if not stripped.startswith("#"):
+            continue
+        title = stripped.lstrip("#").strip()
+        slug = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")[:60]
+        if slug:
+            return slug
+        break
+    return f"card-{datetime.now():%Y%m%d-%H%M%S}"
+
+
+def _card_folders() -> list[str]:
+    root = tools.STUDY_CARDS_DIR
+    try:
+        if not root.is_dir():
+            return []
+        return sorted(
+            path.name
+            for path in root.iterdir()
+            if path.is_dir() and not path.name.startswith(".")
+        )
+    except OSError:
+        return []
+
+
+@app.post("/api/study-card")
+def save_study_card():
+    payload = request.get_json(silent=True) or {}
+    content = payload.get("content")
+    name = payload.get("name")
+    folder = payload.get("folder")
+
+    if not isinstance(content, str) or not content.strip():
+        return jsonify({"error": "Card content is required."}), 400
+    if len(content) > 200_000:
+        return jsonify({"error": "Card is too large (max 200000 characters)."}), 400
+    if name is not None and not isinstance(name, str):
+        return jsonify({"error": "Card name must be a string."}), 400
+    if folder is not None and not isinstance(folder, str):
+        return jsonify({"error": "Folder must be a string."}), 400
+
+    root = tools.STUDY_CARDS_DIR
+    folder = (folder or "").strip()
+    if folder:
+        if Path(folder).is_absolute():
+            return jsonify({"error": "Invalid card folder."}), 400
+        try:
+            target_dir = (root / folder).resolve()
+            target_dir.relative_to(root.resolve())
+        except (OSError, ValueError):
+            return jsonify({"error": "Invalid card folder."}), 400
+        if not target_dir.is_dir():
+            return jsonify({"error": f"Card folder '{folder}' does not exist."}), 404
+    else:
+        target_dir = root
+
+    try:
+        target_dir.mkdir(parents=True, exist_ok=True)
+        if name:
+            if not re.fullmatch(r"[a-z0-9][a-z0-9._-]*\.md", name) or Path(name).name != name:
+                return jsonify({"error": "Invalid card file name."}), 400
+            path = target_dir / name
+        else:
+            stem = _card_slug(content)
+            path = target_dir / f"{stem}.md"
+            counter = 2
+            while path.exists():
+                path = target_dir / f"{stem}-{counter}.md"
+                counter += 1
+        path.write_text(content.rstrip() + "\n", encoding="utf-8")
+        relative = path.relative_to(root.resolve()).as_posix()
+    except (OSError, ValueError) as exc:
+        return jsonify({"error": f"Could not save card: {exc}"}), 500
+
+    return jsonify({"ok": True, "name": path.name, "path": f"/study_cards/{quote(relative)}"})
 
 
 @app.get("/api/health")

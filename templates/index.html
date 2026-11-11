@@ -33,39 +33,77 @@
     </header>
 
     <main class="workspace">
-      <section class="panel chat-panel" aria-label="Chat">
-        <div class="panel-head">
-          <div>
-            <span class="eyebrow">Conversation</span>
+      <section class="panel chat-panel" aria-label="Conversation and card editor">
+        <div class="panel-head chat-head">
+          <div class="panel-tabs" role="tablist" aria-label="Left panel">
+            <button class="panel-tab active" id="tabConversation" type="button" role="tab" aria-selected="true" aria-controls="conversationView">Conversation</button>
+            <button class="panel-tab" id="tabCardEditor" type="button" role="tab" aria-selected="false" aria-controls="cardEditorView">Study Card Editor</button>
           </div>
           <button class="ghost-btn" id="clearBtn" type="button">Clear</button>
         </div>
 
-        <div class="chat-scroll" id="chatScroll">
-          <article class="msg assistant welcome">
-            <div class="avatar assistant-avatar" aria-hidden="true">ML</div>
-            <div class="bubble-wrap">
-              <div class="bubble">
-                <p>I run <strong>{{ model }}</strong> locally.</p>
-                <p>Ask a question and I’ll check your <strong>study_cards</strong> folder first, then search DuckDuckGo and Brave if nothing matches. The trace panel shows every tool, source, and step.</p>
+        <div class="chat-view" id="conversationView" role="tabpanel" aria-labelledby="tabConversation">
+          <div class="chat-scroll" id="chatScroll">
+            <article class="msg assistant welcome">
+              <div class="avatar assistant-avatar" aria-hidden="true">ML</div>
+              <div class="bubble-wrap">
+                <div class="bubble">
+                  <p>I run <strong>{{ model }}</strong> locally.</p>
+                  <p>Ask a question and I’ll check your <strong>study_cards</strong> folder first, then search DuckDuckGo and Brave if nothing matches. The trace panel shows every tool, source, and step taken to get to the answer.</p>
+                </div>
               </div>
+            </article>
+          </div>
+
+          <div class="composer-wrap">
+            <form class="composer" id="composer" autocomplete="off">
+              <textarea id="prompt" rows="1" placeholder="Ask for an answer, a source, or a code snippet…" aria-label="Message"></textarea>
+              <button class="send-btn" id="sendBtn" type="submit" aria-label="Send message">
+                <svg viewBox="0 0 24 24" width="19" height="19" fill="none" aria-hidden="true">
+                  <path d="M12 19V5M12 5l-6 6M12 5l6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </button>
+            </form>
+            <div class="composer-meta">
+              <span>Enter to send · Shift+Enter for a new line</span>
+              <span id="requestMeta">Local inference · no cloud</span>
             </div>
-          </article>
+          </div>
         </div>
 
-        <div class="composer-wrap">
-          <form class="composer" id="composer" autocomplete="off">
-            <textarea id="prompt" rows="1" placeholder="Ask for an answer, a source, or a code snippet…" aria-label="Message"></textarea>
-            <button class="send-btn" id="sendBtn" type="submit" aria-label="Send message">
-              <svg viewBox="0 0 24 24" width="19" height="19" fill="none" aria-hidden="true">
-                <path d="M12 19V5M12 5l-6 6M12 5l6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-            </button>
-          </form>
-          <div class="composer-meta">
-            <span>Enter to send · Shift+Enter for a new line</span>
-            <span id="requestMeta">Local inference · no cloud</span>
+        <div class="card-editor-view" id="cardEditorView" role="tabpanel" aria-labelledby="tabCardEditor" hidden>
+          <div class="card-editor-split">
+            <section class="card-editor-pane" aria-label="Markdown source">
+              <div class="card-pane-head">
+                <span>Markdown</span>
+                <span class="card-pane-hint">saves to study_cards/</span>
+              </div>
+              <textarea class="card-editor-input" id="cardMarkdown" spellcheck="false" placeholder="# Markdown Sample&#10;&#10;## h2 Heading&#10;### h3 Heading&#10;#### h4 Heading&#10;##### h5 Heading&#10;###### h6 Heading&#10;&#10;**This is bold text**&#10;*This is italic text*&#10;~~Strikethrough~~&#10;- bullet points&#10;&#10;## Tasks&#10;- [x] task 1&#10;- [ ] task 2&#10;&#10;[link](https://www.google.com)&#10;&#10;![image example](</study_cards/Sample Card Folder/images/snowflakes.png>)"></textarea>
+            </section>
+            <div class="card-editor-divider" aria-hidden="true"></div>
+            <section class="card-editor-pane" aria-label="Rendered preview">
+              <div class="card-pane-head">
+                <span>Preview</span>
+              </div>
+              <div class="card-editor-preview bubble" id="cardPreview">
+                <p class="card-preview-empty">Rendered Markdown appears here.</p>
+              </div>
+            </section>
           </div>
+          <div class="card-editor-foot">
+            <div class="card-editor-folder">
+              <label class="card-folder-label" for="cardFolder">Folder</label>
+              <input class="card-folder-input" id="cardFolder" list="cardFolders" placeholder="study_cards/ (root)" autocomplete="off" spellcheck="false">
+              <span class="card-editor-note">card will be saved to study_cards/ if no folder is chosen</span>
+            </div>
+            <span class="card-editor-status" id="cardSaveStatus" role="status"></span>
+            <button class="save-btn" id="cardSaveBtn" type="button">Save card</button>
+          </div>
+          <datalist id="cardFolders">
+            {% for folder in card_folders %}
+            <option value="{{ folder }}"></option>
+            {% endfor %}
+          </datalist>
         </div>
       </section>
 
