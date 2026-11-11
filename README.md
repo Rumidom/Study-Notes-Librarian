@@ -8,11 +8,14 @@ Mini-Librarian prioritizes searching your own "study_cards" folder first, and yo
 ![alt text](https://github.com/Rumidom/MiniCPM5-Librarian/blob/main/images/Screenshot_2026-11-10%2018-32-48.png)
 
 ## Install
+### Configuration 
+Rename ```.env.example``` to ```.env``` open the file and add your brave search API key at ```BRAVE_API_KEY=```, you can obtain a free api key here: https://brave.com/search/api/
+
 ### Linux
-run ```run.sh``` then access [http://127.0.0.1:5000/](http://127.0.0.1:5000/) on your browser.
+Run ```run.sh``` then access [http://127.0.0.1:5000/](http://127.0.0.1:5000/) on your browser.
 
 ### Windows
-run ```run.bat``` then access [http://127.0.0.1:5000/](http://127.0.0.1:5000/) on your browser.
+Run ```run.bat``` then access [http://127.0.0.1:5000/](http://127.0.0.1:5000/) on your browser.
 
 ## License
 Mini-Librarian was made using GLM 4.6(Big Pickle) and is MIT licensed
