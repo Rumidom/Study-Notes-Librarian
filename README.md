@@ -9,7 +9,7 @@ Study-Notes-Librarian prioritizes searching your "study_cards" folder first, you
 
 ## TODO
 - [ ] Add study card editor
-- [X] Add configuration page
+- [x] Add configuration page
 
 ## Install
 ### Configuration 
