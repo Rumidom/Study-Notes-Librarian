@@ -266,6 +266,10 @@ button {
   align-items: center;
 }
 
+.chat-head-buttons{
+  align-items: center;
+}
+
 .panel-tabs {
   display: flex;
   gap: 4px;

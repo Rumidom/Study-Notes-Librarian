@@ -17,6 +17,7 @@ const elemts = {
   composer: document.getElementById("composer"),
   sendBtn: document.getElementById("sendBtn"),
   clearBtn: document.getElementById("clearBtn"),
+  stopBtn: document.getElementById("stopBtn"),
   tabConversation: document.getElementById("tabConversation"),
   tabCardEditor: document.getElementById("tabCardEditor"),
   conversationView: document.getElementById("conversationView"),
@@ -685,6 +686,7 @@ function setActiveTab(tab) {
   elemts.conversationView.hidden = !showConversation;
   elemts.cardEditorView.hidden = showConversation;
   elemts.clearBtn.hidden = !showConversation;
+  elemts.stopBtn.hidden = !showConversation;
   elemts.traceTitle.textContent = showConversation ? "Agent Trace" : "Card Browser";
   elemts.traceScroll.hidden = !showConversation;
   elemts.cardBrowserPanel.hidden = showConversation;
