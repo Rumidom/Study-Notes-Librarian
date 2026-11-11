@@ -34,6 +34,6 @@ goto :eof
 
 :error
 echo.
-echo MiniCPM5-Librarian failed to start.
+echo Study-Notes-Librarian failed to start.
 pause
 exit /b 1

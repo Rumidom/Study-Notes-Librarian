@@ -13,7 +13,7 @@ from bs4 import BeautifulSoup
 
 USER_AGENT = (
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/124.0 Safari/537.36 MiniLibrarian/1.0"
+    "(KHTML, like Gecko) Chrome/124.0 Safari/537.36 StudyNotesLibrarian/1.0"
 )
 HTTP_TIMEOUT = float(os.getenv("HTTP_TIMEOUT", "10"))
 MAX_PAGE_CHARS = int(os.getenv("MAX_PAGE_CHARS", "4500"))
