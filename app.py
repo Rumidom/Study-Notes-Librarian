@@ -22,8 +22,8 @@ from llm import LocalLlamaClient
 BASE_DIR = Path(__file__).resolve().parent
 ENV_PATH = BASE_DIR / ".env"
 
-llm = LocalLlamaClient()
-agent = Agent(llm)
+llm_client = LocalLlamaClient()
+agent = Agent(llm_client)
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 1024 * 1024
@@ -237,15 +237,15 @@ def _apply_live_config() -> None:
     cards_dir = Path(os.environ.get("STUDY_CARDS_DIR", "study_cards"))
     tools.STUDY_CARDS_DIR = cards_dir if cards_dir.is_absolute() else BASE_DIR / cards_dir
     tools.HTTP_TIMEOUT = float(os.environ.get("HTTP_TIMEOUT", "10"))
-    llm.max_tokens = int(os.environ.get("MAX_TOKENS", "350"))
+    llm_client.max_tokens = int(os.environ.get("MAX_TOKENS", "350"))
 
 
 @app.get("/")
 def index():
-    llm.start()
+    llm_client.start()
     return render_template(
         "index.html",
-        model=getattr(llm, "model", "MiniCPM5-2B"),
+        model=getattr(llm_client, "model", "MiniCPM5-2B"),
         card_folders=_card_folders(),
     )
 
@@ -334,6 +334,8 @@ def save_study_card():
     if folder is not None and not isinstance(folder, str):
         return jsonify({"error": "Folder must be a string."}), 400
 
+    if (not ("md" in name.split("."))): name = name +".md"
+
     root = tools.STUDY_CARDS_DIR
     folder = (folder or "").strip()
     if folder:
@@ -372,8 +374,8 @@ def save_study_card():
 
 @app.get("/api/health")
 def health():
-    llm.ensure_started()
-    return jsonify(llm.health())
+    llm_client.ensure_started()
+    return jsonify(llm_client.health())
 
 
 @app.get("/api/config")

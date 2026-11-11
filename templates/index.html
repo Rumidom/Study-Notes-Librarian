@@ -14,7 +14,7 @@
   <div class="shell">
     <header class="topbar">
       <div class="brand">
-        <div class="brand-mark" aria-hidden="true"><span>ML</span></div>
+        <div class="brand-mark" aria-hidden="true"><span>SNL</span></div>
         <div class="brand-copy">
           <div class="brand-row">
             <h1>Study Notes Librarian</h1>
@@ -40,13 +40,14 @@
             <button class="panel-tab active" id="tabConversation" type="button" role="tab" aria-selected="true" aria-controls="conversationView">Conversation</button>
             <button class="panel-tab" id="tabCardEditor" type="button" role="tab" aria-selected="false" aria-controls="cardEditorView">Study Card Editor</button>
           </div>
+          <button class="ghost-btn" id="stopBtn" type="button">Stop</button>
           <button class="ghost-btn" id="clearBtn" type="button">Clear</button>
         </div>
 
         <div class="chat-view" id="conversationView" role="tabpanel" aria-labelledby="tabConversation">
           <div class="chat-scroll" id="chatScroll">
             <article class="msg assistant welcome">
-              <div class="avatar assistant-avatar" aria-hidden="true">ML</div>
+              <div class="avatar assistant-avatar" aria-hidden="true">SNL</div>
               <div class="bubble-wrap">
                 <div class="bubble">
                   <p>I run <strong>{{ model }}</strong> locally.</p>
@@ -114,14 +115,12 @@
           <div>
             <span class="eyebrow" id="traceTitle">Agent Trace</span>
           </div>
-          <span class="trace-time" id="traceTime">—</span>
         </div>
 
         <div class="trace-scroll" id="traceScroll">
           <div class="trace-block">
             <div class="block-head">
               <h3>Idle</h3>
-              <span class="block-count">—</span>
             </div>
             <p class="summary-text">No trace yet.</p>
           </div>

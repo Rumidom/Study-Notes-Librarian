@@ -7,7 +7,7 @@ const state = {
   cardName: null,
 };
 
-const els = {
+const elemts = {
   chatScroll: document.getElementById("chatScroll"),
   traceScroll: document.getElementById("traceScroll"),
   traceTime: document.getElementById("traceTime"),
@@ -43,7 +43,7 @@ const els = {
   settingsSave: document.getElementById("settingsSave"),
 };
 
-const emptyTraceHTML = els.traceScroll.innerHTML;
+const emptyTraceHTML = elemts.traceScroll.innerHTML;
 
 const ESCAPES = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
 
@@ -272,7 +272,7 @@ function linkCitations(container, sources) {
 
 function scrollChat() {
   requestAnimationFrame(() => {
-    els.chatScroll.scrollTop = els.chatScroll.scrollHeight;
+    elemts.chatScroll.scrollTop = elemts.chatScroll.scrollHeight;
   });
 }
 
@@ -282,7 +282,7 @@ function addMessage(role, content, options = {}) {
 
   const avatar = document.createElement("div");
   avatar.className = `avatar ${role === "user" ? "user-avatar" : "assistant-avatar"}`;
-  avatar.textContent = role === "user" ? "User" : "ML";
+  avatar.textContent = role === "user" ? "User" : "SNL";
 
   const wrap = document.createElement("div");
   wrap.className = "bubble-wrap";
@@ -309,7 +309,7 @@ function addMessage(role, content, options = {}) {
 
   const nodes = role === "user" ? [wrap, avatar] : [avatar, wrap];
   nodes.forEach((node) => article.appendChild(node));
-  els.chatScroll.appendChild(article);
+  elemts.chatScroll.appendChild(article);
   scrollChat();
   return article;
 }
@@ -320,7 +320,7 @@ function addLoadingMessage() {
 
   const avatar = document.createElement("div");
   avatar.className = "avatar assistant-avatar";
-  avatar.textContent = "ML";
+  avatar.textContent = "SNL";
 
   const wrap = document.createElement("div");
   wrap.className = "bubble-wrap";
@@ -333,13 +333,13 @@ function addLoadingMessage() {
   wrap.appendChild(bubble);
   article.appendChild(avatar);
   article.appendChild(wrap);
-  els.chatScroll.appendChild(article);
+  elemts.chatScroll.appendChild(article);
   scrollChat();
   return article;
 }
 
 function setTraceLoading() {
-  els.traceTime.textContent = "…";
+  elemts.traceTime.textContent = "…";
   const cardsFirst = state.searchStudyCardsFirst;
   const labels = cardsFirst
     ? ["Checking study cards", "Searching the web", "Reading sources", "Writing the answer"]
@@ -348,7 +348,7 @@ function setTraceLoading() {
   const summary = cardsFirst
     ? "Checking study_cards first, then querying DuckDuckGo and Brave if needed."
     : "Searching DuckDuckGo and Brave directly; study-card lookup is off.";
-  els.traceScroll.innerHTML = `
+  elemts.traceScroll.innerHTML = `
     <div class="trace-block">
       <div class="block-head">
         <h3>Working</h3>
@@ -382,13 +382,13 @@ function setTraceLoading() {
 }
 
 function clearTrace() {
-  els.traceScroll.innerHTML = emptyTraceHTML;
-  els.traceTime.textContent = "—";
+  elemts.traceScroll.innerHTML = emptyTraceHTML;
+  elemts.traceTime.textContent = "—";
 }
 
 function renderTrace(result) {
   const elapsed = result.elapsed_ms ? `${(result.elapsed_ms / 1000).toFixed(1)}s` : "—";
-  els.traceTime.textContent = elapsed;
+  elemts.traceTime.textContent = elapsed;
 
   const sources = Array.isArray(result.sources) ? result.sources : [];
   const tools = Array.isArray(result.tools) ? result.tools : [];
@@ -501,29 +501,29 @@ function renderTrace(result) {
       }
     </div>`;
 
-  els.traceScroll.innerHTML =
+  elemts.traceScroll.innerHTML =
     summaryBlock + studyCardsToggleHTML() + flowBlock + toolsBlock + sourcesBlock;
 }
 
 function setBusy(busy) {
   state.busy = busy;
-  els.sendBtn.disabled = busy;
-  els.prompt.setAttribute("aria-busy", String(busy));
+  elemts.sendBtn.disabled = busy;
+  elemts.prompt.setAttribute("aria-busy", String(busy));
 }
 
 async function sendMessage(value) {
-  const text = String(value ?? els.prompt.value).trim();
+  const text = String(value ?? elemts.prompt.value).trim();
   if (!text || state.busy) return;
 
   setBusy(true);
   addMessage("user", text);
   state.conversation.push({ role: "user", content: text });
 
-  els.prompt.value = "";
+  elemts.prompt.value = "";
   resizePrompt();
   const loading = addLoadingMessage();
   setTraceLoading();
-  els.requestMeta.textContent = "Researching…";
+  elemts.requestMeta.textContent = "Researching…";
 
   try {
     const response = await fetch("/api/chat", {
@@ -551,55 +551,55 @@ async function sendMessage(value) {
     state.conversation.push({ role: "assistant", content: result.answer });
     state.lastResult = result;
     renderTrace(result);
-    els.requestMeta.textContent = `${seconds}s · ${result.sources?.length || 0} sources`;
+    elemts.requestMeta.textContent = `${seconds}s · ${result.sources?.length || 0} sources`;
   } catch (error) {
     loading.remove();
     const message = error instanceof Error ? error.message : String(error);
     addMessage("assistant", `I hit an error: ${message}`, { meta: ["error"] });
-    els.traceTime.textContent = "—";
-    els.traceScroll.innerHTML = `
+    elemts.traceTime.textContent = "—";
+    elemts.traceScroll.innerHTML = `
       <div class="trace-block">
         <div class="block-head"><h3>Request failed</h3></div>
         <p class="empty-note">${escapeHtml(message)}</p>
       </div>`;
-    els.requestMeta.textContent = "Request failed";
+    elemts.requestMeta.textContent = "Request failed";
   } finally {
     setBusy(false);
-    els.prompt.focus();
+    elemts.prompt.focus();
   }
 }
 
 function resizePrompt() {
-  els.prompt.style.height = "auto";
-  els.prompt.style.height = `${Math.min(els.prompt.scrollHeight, 160)}px`;
+  elemts.prompt.style.height = "auto";
+  elemts.prompt.style.height = `${Math.min(elemts.prompt.scrollHeight, 160)}px`;
 }
 
 function clearChat() {
   state.conversation = [];
   state.lastResult = null;
-  els.chatScroll.querySelectorAll(".msg:not(.welcome)").forEach((node) => node.remove());
+  elemts.chatScroll.querySelectorAll(".msg:not(.welcome)").forEach((node) => node.remove());
   clearTrace();
-  els.requestMeta.textContent = "Local inference · no cloud";
-  els.prompt.focus();
+  elemts.requestMeta.textContent = "Local inference · no cloud";
+  elemts.prompt.focus();
   scrollChat();
 }
 
 function updateStatus(health) {
   const status = health.status || (health.online ? "ready" : "error");
-  els.modelStatus.dataset.state = status;
-  els.modelStatus.title = health.message || "";
+  elemts.modelStatus.dataset.state = status;
+  elemts.modelStatus.title = health.message || "";
 
   if (status === "downloading" && health.progress > 0) {
-    els.statusText.textContent = `Downloading MiniCPM5-2B · ${health.progress}%`;
+    elemts.statusText.textContent = `Downloading MiniCPM5-2B · ${health.progress}%`;
   } else if (status === "loading" || status === "downloading" || status === "checking") {
-    els.statusText.textContent = health.message || "Loading MiniCPM5-2B…";
+    elemts.statusText.textContent = health.message || "Loading MiniCPM5-2B…";
   } else if (status === "ready") {
-    els.statusText.textContent = `${health.model || "MiniCPM5-2B"} · ready`;
+    elemts.statusText.textContent = `${health.model || "MiniCPM5-2B"} · ready`;
     if (!state.lastResult) {
-      els.requestMeta.textContent = health.backend || "Local inference";
+      elemts.requestMeta.textContent = health.backend || "Local inference";
     }
   } else {
-    els.statusText.textContent = "Model offline";
+    elemts.statusText.textContent = "Model offline";
   }
 }
 
@@ -622,21 +622,21 @@ async function checkHealth() {
   }
 }
 
-els.composer.addEventListener("submit", (event) => {
+elemts.composer.addEventListener("submit", (event) => {
   event.preventDefault();
   sendMessage();
 });
 
-els.prompt.addEventListener("input", resizePrompt);
+elemts.prompt.addEventListener("input", resizePrompt);
 
-els.prompt.addEventListener("keydown", (event) => {
+elemts.prompt.addEventListener("keydown", (event) => {
   if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
     event.preventDefault();
-    els.composer.requestSubmit();
+    elemts.composer.requestSubmit();
   }
 });
 
-els.chatScroll.addEventListener("click", async (event) => {
+elemts.chatScroll.addEventListener("click", async (event) => {
   const suggestion = event.target.closest(".suggestion");
   if (suggestion) {
     sendMessage(suggestion.dataset.prompt || suggestion.textContent || "");
@@ -662,7 +662,7 @@ els.chatScroll.addEventListener("click", async (event) => {
   }
 });
 
-els.traceScroll.addEventListener("change", (event) => {
+elemts.traceScroll.addEventListener("change", (event) => {
   const input = event.target.closest("#studyCardsFirst");
   if (!input) return;
   state.searchStudyCardsFirst = input.checked;
@@ -674,55 +674,59 @@ els.traceScroll.addEventListener("change", (event) => {
   }
 });
 
-els.clearBtn.addEventListener("click", clearChat);
+elemts.clearBtn.addEventListener("click", clearChat);
 
 function setActiveTab(tab) {
   const showConversation = tab === "conversation";
-  els.tabConversation.classList.toggle("active", showConversation);
-  els.tabConversation.setAttribute("aria-selected", String(showConversation));
-  els.tabCardEditor.classList.toggle("active", !showConversation);
-  els.tabCardEditor.setAttribute("aria-selected", String(!showConversation));
-  els.conversationView.hidden = !showConversation;
-  els.cardEditorView.hidden = showConversation;
-  els.clearBtn.hidden = !showConversation;
-  els.traceTitle.textContent = showConversation ? "Agent Trace" : "Card Browser";
-  els.traceScroll.hidden = !showConversation;
-  els.cardBrowserPanel.hidden = showConversation;
+  elemts.tabConversation.classList.toggle("active", showConversation);
+  elemts.tabConversation.setAttribute("aria-selected", String(showConversation));
+  elemts.tabCardEditor.classList.toggle("active", !showConversation);
+  elemts.tabCardEditor.setAttribute("aria-selected", String(!showConversation));
+  elemts.conversationView.hidden = !showConversation;
+  elemts.cardEditorView.hidden = showConversation;
+  elemts.clearBtn.hidden = !showConversation;
+  elemts.traceTitle.textContent = showConversation ? "Agent Trace" : "Card Browser";
+  elemts.traceScroll.hidden = !showConversation;
+  elemts.cardBrowserPanel.hidden = showConversation;
   if (!showConversation) {
     renderCardPreview();
     loadCardBrowser();
   }
 }
 
-els.tabConversation.addEventListener("click", () => setActiveTab("conversation"));
-els.tabCardEditor.addEventListener("click", () => setActiveTab("cardeditor"));
+elemts.tabConversation.addEventListener("click", () => setActiveTab("conversation"));
+elemts.tabCardEditor.addEventListener("click", () => setActiveTab("cardeditor"));
 
 const CARD_PREVIEW_EMPTY = '<p class="card-preview-empty">Rendered Markdown appears here.</p>';
 
+function removeExtension(filename) {
+  return (filename.substring(0, filename.lastIndexOf('.')) || filename);
+}
+
 function renderCardPreview() {
-  const raw = els.cardMarkdown.value;
+  const raw = elemts.cardMarkdown.value;
   if (!raw.trim()) {
-    els.cardPreview.innerHTML = CARD_PREVIEW_EMPTY;
+    elemts.cardPreview.innerHTML = CARD_PREVIEW_EMPTY;
     return;
   }
-  els.cardPreview.innerHTML = renderMarkdown(raw);
-  enhanceCodeBlocks(els.cardPreview);
+  elemts.cardPreview.innerHTML = renderMarkdown(raw);
+  enhanceCodeBlocks(elemts.cardPreview);
 }
 
 //function setCardStatus(text, kind) {
-//  els.cardSaveStatus.textContent = text || "";
-//  els.cardSaveStatus.className = `card-editor-status${kind ? ` ${kind}` : ""}`;
+//  elemts.cardSaveStatus.textContent = text || "";
+//  elemts.cardSaveStatus.className = `card-editor-status${kind ? ` ${kind}` : ""}`;
 //}
 
-els.cardMarkdown.addEventListener("input", renderCardPreview);
+elemts.cardMarkdown.addEventListener("input", renderCardPreview);
 
-els.cardSaveBtn.addEventListener("click", async () => {
-  if (!els.cardMarkdown.value.trim()) {
+elemts.cardSaveBtn.addEventListener("click", async () => {
+  if (!elemts.cardMarkdown.value.trim()) {
     //setCardStatus("Nothing to save yet.", "error");
     setTopbarNote("Nothing to save yet.", "error");
     return;
   }
-  els.cardSaveBtn.disabled = true;
+  elemts.cardSaveBtn.disabled = true;
   //setCardStatus("Saving…");
   setTopbarNote("Saving…");
   try {
@@ -730,9 +734,9 @@ els.cardSaveBtn.addEventListener("click", async () => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        content: els.cardMarkdown.value,
-        name: els.cardName.value,
-        folder: els.cardFolder.value.trim() || null,
+        content: elemts.cardMarkdown.value,
+        name: removeExtension(elemts.cardName.value),
+        folder: elemts.cardFolder.value.trim() || null,
       }),
     });
     const data = await response.json().catch(() => ({}));
@@ -746,7 +750,7 @@ els.cardSaveBtn.addEventListener("click", async () => {
     setTopbarNote(error.message || "Save failed.", "error");
     //setCardStatus(error.message || "Save failed.", "error");
   } finally {
-    els.cardSaveBtn.disabled = false;
+    elemts.cardSaveBtn.disabled = false;
   }
 });
 
@@ -754,24 +758,24 @@ let topbarNoteTimer = null;
 
 function setTopbarNote(text, title) {
   clearTimeout(topbarNoteTimer);
-  els.topbarNote.textContent = text || "";
-  els.topbarNote.title = title || text || "";
-  els.topbarNote.hidden = !text;
+  elemts.topbarNote.textContent = text || "";
+  elemts.topbarNote.title = title || text || "";
+  elemts.topbarNote.hidden = !text;
   if (text) {
     topbarNoteTimer = setTimeout(() => {
-      els.topbarNote.hidden = true;
+      elemts.topbarNote.hidden = true;
     }, 6000);
   }
 }
 
 function setCardBrowserStatus(text, kind) {
-  els.cardBrowserStatus.hidden = !text;
-  els.cardBrowserStatus.textContent = text || "";
-  els.cardBrowserStatus.className = `card-browser-status${kind ? ` ${kind}` : ""}`;
+  elemts.cardBrowserStatus.hidden = !text;
+  elemts.cardBrowserStatus.textContent = text || "";
+  elemts.cardBrowserStatus.className = `card-browser-status${kind ? ` ${kind}` : ""}`;
 }
 
 async function loadCardBrowser() {
-  els.cardBrowserList.innerHTML = "";
+  elemts.cardBrowserList.innerHTML = "";
   setCardBrowserStatus("Loading cards…");
   try {
     const response = await fetch("/api/study-cards");
@@ -782,13 +786,13 @@ async function loadCardBrowser() {
       Array.isArray(data.folders) ? data.folders : []
     );
   } catch (error) {
-    els.cardBrowserList.innerHTML = "";
+    elemts.cardBrowserList.innerHTML = "";
     setCardBrowserStatus(error.message || "Could not load cards.", "error");
   }
 }
 
 function renderCardBrowser(cards, folders) {
-  els.cardBrowserList.innerHTML = "";
+  elemts.cardBrowserList.innerHTML = "";
   if (!cards.length && !folders.length) {
     setCardBrowserStatus("No markdown cards yet. Save one from the editor.");
     return;
@@ -826,7 +830,7 @@ function renderCardBrowser(cards, folders) {
         button.addEventListener("click", () => loadCardIntoEditor(card, button));
         group.appendChild(button);
       });
-      els.cardBrowserList.appendChild(group);
+      elemts.cardBrowserList.appendChild(group);
     });
 }
 
@@ -834,12 +838,12 @@ async function loadCardIntoEditor(card, button) {
   try {
     const response = await fetch(card.url);
     if (!response.ok) throw new Error(`Could not open ${card.name} (${response.status}).`);
-    els.cardMarkdown.value = await response.text();
+    elemts.cardMarkdown.value = await response.text();
     renderCardPreview();
     state.cardName = card.name;
-    els.cardFolder.value = card.folder || "";
-    els.cardName.value = card.name || "";
-    els.cardBrowserList
+    elemts.cardFolder.value = card.folder || "";
+    elemts.cardName.value = card.name || "";
+    elemts.cardBrowserList
       .querySelectorAll(".card-browser-item.active")
       .forEach((item) => item.classList.remove("active"));
     button.classList.add("active");
@@ -850,8 +854,8 @@ async function loadCardIntoEditor(card, button) {
 }
 
 function setSettingsStatus(text, kind) {
-  els.settingsStatus.textContent = text || "";
-  els.settingsStatus.className = `settings-status${kind ? ` ${kind}` : ""}`;
+  elemts.settingsStatus.textContent = text || "";
+  elemts.settingsStatus.className = `settings-status${kind ? ` ${kind}` : ""}`;
 }
 
 function buildSettingControl(field) {
@@ -933,10 +937,10 @@ function buildSettingControl(field) {
 }
 
 function renderSettings(config) {
-  els.settingsScroll.innerHTML = "";
+  elemts.settingsScroll.innerHTML = "";
   const groups = Array.isArray(config.groups) ? config.groups : [];
   if (!groups.length || !config.editable) {
-    els.settingsScroll.innerHTML = `<p class="empty-note">${
+    elemts.settingsScroll.innerHTML = `<p class="empty-note">${
       config.editable === false
         ? "python-dotenv is not installed, so settings cannot be edited here."
         : "No settings available."
@@ -959,14 +963,14 @@ function renderSettings(config) {
     }
     fragment.appendChild(section);
   }
-  els.settingsScroll.appendChild(fragment);
+  elemts.settingsScroll.appendChild(fragment);
 }
 
 async function openSettings() {
-  els.settingsOverlay.hidden = false;
-  els.settingsScroll.innerHTML = "";
+  elemts.settingsOverlay.hidden = false;
+  elemts.settingsScroll.innerHTML = "";
   setSettingsStatus("Loading settings…");
-  els.settingsSave.disabled = true;
+  elemts.settingsSave.disabled = true;
   try {
     const response = await fetch("/api/config", { cache: "no-store" });
     const config = await response.json();
@@ -975,23 +979,23 @@ async function openSettings() {
     }
     renderSettings(config);
     setSettingsStatus(config.env_exists ? "" : "No .env file yet — one will be created on save.");
-    els.settingsSave.disabled = !config.editable;
+    elemts.settingsSave.disabled = !config.editable;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    els.settingsScroll.innerHTML = `<p class="empty-note">${escapeHtml(message)}</p>`;
+    elemts.settingsScroll.innerHTML = `<p class="empty-note">${escapeHtml(message)}</p>`;
     setSettingsStatus("Could not load settings.", "error");
-    els.settingsSave.disabled = false;
+    elemts.settingsSave.disabled = false;
   }
 }
 
 function closeSettings() {
-  els.settingsOverlay.hidden = true;
+  elemts.settingsOverlay.hidden = true;
   setSettingsStatus("");
 }
 
 function collectSettings() {
   const values = {};
-  els.settingsScroll.querySelectorAll("[data-key]").forEach((input) => {
+  elemts.settingsScroll.querySelectorAll("[data-key]").forEach((input) => {
     const key = input.dataset.key;
     const current = input.dataset.type === "bool" ? (input.checked ? "1" : "0") : input.value.trim();
     if (current !== input.dataset.initial) {
@@ -1010,7 +1014,7 @@ async function saveSettings(event) {
     return;
   }
 
-  els.settingsSave.disabled = true;
+  elemts.settingsSave.disabled = true;
   setSettingsStatus("Saving…");
   try {
     const response = await fetch("/api/config", {
@@ -1023,7 +1027,7 @@ async function saveSettings(event) {
       throw new Error(result.error || `HTTP ${response.status}`);
     }
 
-    els.settingsScroll.querySelectorAll("[data-key]").forEach((input) => {
+    elemts.settingsScroll.querySelectorAll("[data-key]").forEach((input) => {
       if (input.dataset.key in values) {
         input.dataset.initial =
           input.dataset.type === "bool" ? (input.checked ? "1" : "0") : input.value.trim();
@@ -1042,27 +1046,27 @@ async function saveSettings(event) {
     const message = error instanceof Error ? error.message : String(error);
     setSettingsStatus(message, "error");
   } finally {
-    els.settingsSave.disabled = false;
+    elemts.settingsSave.disabled = false;
   }
 }
 
-els.settingsBtn.addEventListener("click", openSettings);
-els.settingsClose.addEventListener("click", closeSettings);
-els.settingsCancel.addEventListener("click", closeSettings);
+elemts.settingsBtn.addEventListener("click", openSettings);
+elemts.settingsClose.addEventListener("click", closeSettings);
+elemts.settingsCancel.addEventListener("click", closeSettings);
 
-els.settingsOverlay.addEventListener("click", (event) => {
-  if (event.target === els.settingsOverlay) closeSettings();
+elemts.settingsOverlay.addEventListener("click", (event) => {
+  if (event.target === elemts.settingsOverlay) closeSettings();
 });
 
 document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape" && !els.settingsOverlay.hidden) {
+  if (event.key === "Escape" && !elemts.settingsOverlay.hidden) {
     closeSettings();
   }
 });
 
-els.settingsForm.addEventListener("submit", saveSettings);
+elemts.settingsForm.addEventListener("submit", saveSettings);
 
-els.settingsScroll.addEventListener("click", (event) => {
+elemts.settingsScroll.addEventListener("click", (event) => {
   const toggle = event.target.closest(".secret-toggle");
   if (!toggle) return;
   const input = toggle.closest(".config-field")?.querySelector("input");
