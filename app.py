@@ -1,26 +1,240 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 try:
-    from dotenv import load_dotenv
+    from dotenv import load_dotenv, set_key
 
     load_dotenv()
 except ImportError:
-    pass
+    set_key = None
 
 from flask import Flask, jsonify, render_template, request, send_from_directory
 
+import tools
 from agent import Agent
-from llm import build_llm
-from tools import STUDY_CARDS_DIR
+from llm import LocalLlamaClient
 
-llm = build_llm()
+BASE_DIR = Path(__file__).resolve().parent
+ENV_PATH = BASE_DIR / ".env"
+
+llm = LocalLlamaClient()
 agent = Agent(llm)
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 1024 * 1024
 app.json.ensure_ascii = False
+
+_DEFAULT_THREADS = str(max(1, min(8, (os.cpu_count() or 4) // 2)))
+
+CONFIG_GROUPS = [
+    {
+        "name": "Web search",
+        "fields": [
+            {
+                "key": "BRAVE_API_KEY",
+                "label": "Brave Search API key",
+                "type": "secret",
+                "default": "",
+                "hint": "Optional. DuckDuckGo works without a key. Free keys: brave.com/search/api",
+            },
+            {
+                "key": "MAX_SOURCES",
+                "label": "Max sources",
+                "type": "int",
+                "default": "3",
+                "min": 1,
+                "max": 10,
+                "hint": "Sources cited in the answer; the same number of top pages is read in full.",
+            },
+            {
+                "key": "HTTP_TIMEOUT",
+                "label": "HTTP timeout (seconds)",
+                "type": "int",
+                "default": "10",
+                "min": 1,
+                "max": 120,
+                "hint": "Timeout for search and page requests.",
+            },
+        ],
+    },
+    {
+        "name": "Study cards",
+        "fields": [
+            {
+                "key": "STUDY_CARDS_DIR",
+                "label": "Study cards folder",
+                "type": "text",
+                "default": "study_cards",
+                "hint": "Checked recursively before any web search. Relative paths resolve from the app folder.",
+            },
+        ],
+    },
+    {
+        "name": "Model",
+        "hint": "Model and server settings apply after a restart.",
+        "restart": True,
+        "fields": [
+            {
+                "key": "MAX_TOKENS",
+                "label": "Max answer tokens",
+                "type": "int",
+                "default": "350",
+                "min": 64,
+                "max": 4096,
+                "hint": "Longest answer the model may generate.",
+                "restart": False,
+            },
+            {
+                "key": "MODEL_REPO",
+                "label": "Model repository",
+                "type": "text",
+                "default": "openbmb/MiniCPM5-2B-GGUF",
+                "hint": "Hugging Face GGUF repository the weights come from.",
+            },
+            {
+                "key": "MODEL_FILE",
+                "label": "Model file",
+                "type": "text",
+                "default": "MiniCPM5-2B-Q4_K_M.gguf",
+                "hint": "GGUF file downloaded from the repository.",
+            },
+            {
+                "key": "MODEL_DIR",
+                "label": "Model directory",
+                "type": "text",
+                "default": "models",
+                "hint": "Where model weights are stored.",
+            },
+            {
+                "key": "AUTO_DOWNLOAD",
+                "label": "Auto download",
+                "type": "bool",
+                "default": "1",
+                "hint": "Download missing weights automatically at startup.",
+            },
+            {
+                "key": "N_CTX",
+                "label": "Context window",
+                "type": "int",
+                "default": "6144",
+                "min": 512,
+                "max": 32768,
+                "hint": "Total context tokens available to the model.",
+            },
+            {
+                "key": "N_THREADS",
+                "label": "CPU threads",
+                "type": "int",
+                "default": _DEFAULT_THREADS,
+                "min": 1,
+                "max": 64,
+                "hint": "CPU threads used for inference.",
+            },
+            {
+                "key": "N_GPU_LAYERS",
+                "label": "GPU layers",
+                "type": "int",
+                "default": "0",
+                "min": 0,
+                "max": 128,
+                "hint": "Layers offloaded to the GPU. 0 means CPU only.",
+            },
+            {
+                "key": "N_BATCH",
+                "label": "Batch size",
+                "type": "int",
+                "default": "512",
+                "min": 32,
+                "max": 4096,
+                "hint": "Prompt batch size used by llama.cpp.",
+            },
+            {
+                "key": "MODEL_LOAD_TIMEOUT",
+                "label": "Load timeout (seconds)",
+                "type": "int",
+                "default": "300",
+                "min": 30,
+                "max": 3600,
+                "hint": "How long a request waits for the model to finish loading.",
+            },
+        ],
+    },
+    {
+        "name": "Server",
+        "hint": "Applied after a restart.",
+        "restart": True,
+        "fields": [
+            {
+                "key": "FLASK_RUN_HOST",
+                "label": "Host",
+                "type": "text",
+                "default": "127.0.0.1",
+                "hint": "Network interface the server listens on.",
+            },
+            {
+                "key": "FLASK_RUN_PORT",
+                "label": "Port",
+                "type": "int",
+                "default": "5000",
+                "min": 1,
+                "max": 65535,
+                "hint": "Port the server listens on.",
+            },
+            {
+                "key": "FLASK_DEBUG",
+                "label": "Debug mode",
+                "type": "bool",
+                "default": "0",
+                "hint": "Enables the Flask debug reloader.",
+            },
+        ],
+    },
+]
+
+
+def _config_fields() -> dict:
+    fields: dict[str, dict] = {}
+    for group in CONFIG_GROUPS:
+        for field in group["fields"]:
+            fields[field["key"]] = {
+                **field,
+                "restart": field.get("restart", group.get("restart", False)),
+            }
+    return fields
+
+
+def _normalize_setting(field: dict, raw) -> tuple[str | None, str]:
+    value = str(raw).strip()
+    kind = field["type"]
+    if kind == "bool":
+        lowered = value.lower()
+        if lowered in {"1", "true", "yes", "on"}:
+            return None, "1"
+        if lowered in {"0", "false", "no", "off", ""}:
+            return None, "0"
+        return "must be a boolean", value
+    if kind == "int":
+        try:
+            number = int(value)
+        except ValueError:
+            return "must be a whole number", value
+        if number < field["min"] or number > field["max"]:
+            return f"must be between {field['min']} and {field['max']}", value
+        return None, str(number)
+    if not value and field["key"] != "BRAVE_API_KEY":
+        return "cannot be empty", value
+    if len(value) > 200:
+        return "is too long (max 200 characters)", value
+    return None, value
+
+
+def _apply_live_config() -> None:
+    cards_dir = Path(os.environ.get("STUDY_CARDS_DIR", "study_cards"))
+    tools.STUDY_CARDS_DIR = cards_dir if cards_dir.is_absolute() else BASE_DIR / cards_dir
+    tools.HTTP_TIMEOUT = float(os.environ.get("HTTP_TIMEOUT", "10"))
+    llm.max_tokens = int(os.environ.get("MAX_TOKENS", "350"))
 
 
 @app.get("/")
@@ -34,13 +248,78 @@ def index():
 
 @app.get("/study_cards/<path:filename>")
 def study_card(filename: str):
-    return send_from_directory(str(STUDY_CARDS_DIR), filename)
+    return send_from_directory(str(tools.STUDY_CARDS_DIR), filename)
 
 
 @app.get("/api/health")
 def health():
     llm.ensure_started()
     return jsonify(llm.health())
+
+
+@app.get("/api/config")
+def get_config():
+    groups = []
+    for group in CONFIG_GROUPS:
+        fields = []
+        for field in group["fields"]:
+            fields.append(
+                {
+                    **field,
+                    "value": os.environ.get(field["key"], field["default"]),
+                    "restart": field.get("restart", group.get("restart", False)),
+                }
+            )
+        groups.append({"name": group["name"], "hint": group.get("hint", ""), "fields": fields})
+    return jsonify(
+        {
+            "env_path": str(ENV_PATH),
+            "env_exists": ENV_PATH.exists(),
+            "editable": set_key is not None,
+            "groups": groups,
+        }
+    )
+
+
+@app.post("/api/config")
+def save_config():
+    if set_key is None:
+        return jsonify({"error": "python-dotenv is required to edit settings."}), 503
+
+    payload = request.get_json(silent=True) or {}
+    values = payload.get("values")
+    if not isinstance(values, dict) or not values:
+        return jsonify({"error": "values must be a non-empty object."}), 400
+
+    fields = _config_fields()
+    unknown = sorted(key for key in values if key not in fields)
+    if unknown:
+        return jsonify({"error": f"Unknown setting: {', '.join(unknown)}."}), 400
+
+    clean: dict[str, str] = {}
+    for key, raw in values.items():
+        error, value = _normalize_setting(fields[key], raw)
+        if error:
+            return jsonify({"error": f"{fields[key]['label']}: {error}."}), 400
+        clean[key] = value
+
+    try:
+        for key, value in clean.items():
+            set_key(ENV_PATH, key, value)
+            os.environ[key] = value
+    except OSError as exc:
+        return jsonify({"error": f"Could not write {ENV_PATH}: {exc}"}), 500
+
+    _apply_live_config()
+    restart_keys = sorted(key for key in clean if fields[key]["restart"])
+    return jsonify(
+        {
+            "ok": True,
+            "saved": sorted(clean),
+            "restart_required": bool(restart_keys),
+            "restart_keys": restart_keys,
+        }
+    )
 
 
 @app.post("/api/chat")

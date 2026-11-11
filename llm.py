@@ -6,8 +6,6 @@ import re
 import threading
 import time
 
-import requests
-
 from model_store import MODEL_PATH, ensure_model, model_ready
 
 logger = logging.getLogger(__name__)
@@ -200,94 +198,3 @@ class LocalLlamaClient:
             "gpu_layers": self.n_gpu_layers,
             "load_seconds": load_seconds,
         }
-
-
-class OpenAIClient:
-    def __init__(self) -> None:
-        self.base_url = os.getenv("LLM_BASE_URL", "http://127.0.0.1:30000/v1").rstrip("/")
-        self.model = os.getenv("LLM_MODEL", "openbmb/MiniCPM5-2B")
-        self.api_key = os.getenv("LLM_API_KEY", "local")
-        self.timeout = float(os.getenv("LLM_TIMEOUT", "180"))
-        self.max_tokens = int(os.getenv("MAX_TOKENS", "700"))
-
-    def start(self) -> None:
-        return None
-
-    def ensure_started(self) -> None:
-        return None
-
-    def chat(
-        self,
-        messages: list[dict[str, str]],
-        temperature: float = 0.5,
-        max_tokens: int | None = None,
-        top_p: float = 0.9,
-        timeout: float | None = None,
-    ) -> str:
-        payload = {
-            "model": self.model,
-            "messages": messages,
-            "temperature": temperature,
-            "top_p": top_p,
-            "max_tokens": max_tokens or self.max_tokens,
-            "stream": False,
-        }
-        headers = {"Content-Type": "application/json"}
-        if self.api_key:
-            headers["Authorization"] = f"Bearer {self.api_key}"
-        try:
-            response = requests.post(
-                f"{self.base_url}/chat/completions",
-                json=payload,
-                headers=headers,
-                timeout=timeout or self.timeout,
-            )
-        except requests.RequestException as exc:
-            raise LLMError(f"Could not reach the model server at {self.base_url}: {exc}") from exc
-
-        if response.status_code >= 400:
-            raise LLMError(f"Model server returned HTTP {response.status_code}: {response.text[:300]}")
-        try:
-            content = response.json()["choices"][0]["message"]["content"]
-        except (KeyError, IndexError, TypeError, ValueError) as exc:
-            raise LLMError("Model server returned an unexpected response.") from exc
-
-        if isinstance(content, list):
-            content = "".join(part.get("text", "") for part in content if isinstance(part, dict))
-        content = clean_model_text(str(content or ""))
-        if not content:
-            raise LLMError("MiniCPM5-2B returned an empty response.")
-        return content
-
-    def health(self) -> dict:
-        result = {
-            "online": False,
-            "status": "checking",
-            "progress": 0,
-            "message": "Checking the model server…",
-            "backend": "OpenAI-compatible · remote",
-            "model": self.model,
-            "base_url": self.base_url,
-        }
-        headers = {}
-        if self.api_key:
-            headers["Authorization"] = f"Bearer {self.api_key}"
-        try:
-            response = requests.get(f"{self.base_url}/models", headers=headers, timeout=5)
-            if response.status_code < 400:
-                result.update(online=True, status="ready", progress=100, message="Model server ready")
-            else:
-                result.update(
-                    status="error",
-                    message=f"Model server returned HTTP {response.status_code}",
-                )
-        except requests.RequestException as exc:
-            result.update(status="error", message=f"Model server offline: {exc}")
-        return result
-
-
-def build_llm() -> LocalLlamaClient | OpenAIClient:
-    backend = os.getenv("LLM_BACKEND", "llama_cpp").strip().lower()
-    if backend in {"openai", "server", "sglang", "ollama", "vllm"}:
-        return OpenAIClient()
-    return LocalLlamaClient()

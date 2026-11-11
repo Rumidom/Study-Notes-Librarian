@@ -17,6 +17,14 @@ const els = {
   requestMeta: document.getElementById("requestMeta"),
   modelStatus: document.getElementById("modelStatus"),
   statusText: document.getElementById("statusText"),
+  settingsBtn: document.getElementById("settingsBtn"),
+  settingsOverlay: document.getElementById("settingsOverlay"),
+  settingsClose: document.getElementById("settingsClose"),
+  settingsCancel: document.getElementById("settingsCancel"),
+  settingsForm: document.getElementById("settingsForm"),
+  settingsScroll: document.getElementById("settingsScroll"),
+  settingsStatus: document.getElementById("settingsStatus"),
+  settingsSave: document.getElementById("settingsSave"),
 };
 
 const emptyTraceHTML = els.traceScroll.innerHTML;
@@ -651,6 +659,229 @@ els.traceScroll.addEventListener("change", (event) => {
 });
 
 els.clearBtn.addEventListener("click", clearChat);
+
+function setSettingsStatus(text, kind) {
+  els.settingsStatus.textContent = text || "";
+  els.settingsStatus.className = `settings-status${kind ? ` ${kind}` : ""}`;
+}
+
+function buildSettingControl(field) {
+  const id = `cfg-${field.key}`;
+  const value = field.value ?? "";
+
+  if (field.type === "bool") {
+    const row = document.createElement("label");
+    row.className = "switch-row config-bool";
+    row.htmlFor = id;
+    row.innerHTML = `
+      <span class="switch-copy">
+        <span class="switch-title">${escapeHtml(field.label)}${
+          field.restart ? ' <span class="restart-tag">restart</span>' : ""
+        }</span>
+        <span class="switch-hint">${escapeHtml(field.hint || "")}</span>
+      </span>
+      <span class="switch">
+        <input type="checkbox" id="${id}" data-key="${escapeHtml(field.key)}" data-type="bool" data-initial="${value === "1" ? "1" : "0"}" role="switch" ${value === "1" ? "checked" : ""}>
+        <span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span>
+      </span>`;
+    return row;
+  }
+
+  const wrap = document.createElement("div");
+  wrap.className = "config-field";
+
+  const labelRow = document.createElement("div");
+  labelRow.className = "config-label-row";
+  const label = document.createElement("label");
+  label.className = "config-label";
+  label.htmlFor = id;
+  label.innerHTML = `${escapeHtml(field.label)}${
+    field.restart ? ' <span class="restart-tag">restart</span>' : ""
+  }`;
+  labelRow.appendChild(label);
+
+  if (field.type === "secret") {
+    labelRow.insertAdjacentHTML(
+      "beforeend",
+      '<button type="button" class="ghost-btn secret-toggle">Show</button>'
+    );
+  }
+
+  const input = document.createElement("input");
+  input.id = id;
+  input.dataset.key = field.key;
+  input.dataset.type = field.type;
+  input.dataset.initial = value;
+  input.value = value;
+  input.className = "config-input";
+  if (field.type === "secret") {
+    input.type = "password";
+    input.autocomplete = "off";
+    input.spellcheck = false;
+  } else if (field.type === "int") {
+    input.type = "number";
+    input.min = field.min;
+    input.max = field.max;
+    input.step = "1";
+  } else {
+    input.type = "text";
+    input.spellcheck = false;
+  }
+
+  const hint = document.createElement("p");
+  hint.className = "config-hint";
+  hint.textContent = field.hint || "";
+
+  if (field.type === "secret") {
+    const row = document.createElement("div");
+    row.className = "secret-row";
+    row.appendChild(input);
+    wrap.append(labelRow, row, hint);
+  } else {
+    wrap.append(labelRow, input, hint);
+  }
+  return wrap;
+}
+
+function renderSettings(config) {
+  els.settingsScroll.innerHTML = "";
+  const groups = Array.isArray(config.groups) ? config.groups : [];
+  if (!groups.length || !config.editable) {
+    els.settingsScroll.innerHTML = `<p class="empty-note">${
+      config.editable === false
+        ? "python-dotenv is not installed, so settings cannot be edited here."
+        : "No settings available."
+    }</p>`;
+    return;
+  }
+
+  const fragment = document.createDocumentFragment();
+  for (const group of groups) {
+    const section = document.createElement("section");
+    section.className = "settings-group";
+    const head = document.createElement("div");
+    head.className = "settings-group-head";
+    head.innerHTML = `
+      <h3>${escapeHtml(group.name || "")}</h3>
+      ${group.hint ? `<span>${escapeHtml(group.hint)}</span>` : ""}`;
+    section.appendChild(head);
+    for (const field of group.fields || []) {
+      section.appendChild(buildSettingControl(field));
+    }
+    fragment.appendChild(section);
+  }
+  els.settingsScroll.appendChild(fragment);
+}
+
+async function openSettings() {
+  els.settingsOverlay.hidden = false;
+  els.settingsScroll.innerHTML = "";
+  setSettingsStatus("Loading settings…");
+  els.settingsSave.disabled = true;
+  try {
+    const response = await fetch("/api/config", { cache: "no-store" });
+    const config = await response.json();
+    if (!response.ok || config.error) {
+      throw new Error(config.error || `HTTP ${response.status}`);
+    }
+    renderSettings(config);
+    setSettingsStatus(config.env_exists ? "" : "No .env file yet — one will be created on save.");
+    els.settingsSave.disabled = !config.editable;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    els.settingsScroll.innerHTML = `<p class="empty-note">${escapeHtml(message)}</p>`;
+    setSettingsStatus("Could not load settings.", "error");
+    els.settingsSave.disabled = false;
+  }
+}
+
+function closeSettings() {
+  els.settingsOverlay.hidden = true;
+  setSettingsStatus("");
+}
+
+function collectSettings() {
+  const values = {};
+  els.settingsScroll.querySelectorAll("[data-key]").forEach((input) => {
+    const key = input.dataset.key;
+    const current = input.dataset.type === "bool" ? (input.checked ? "1" : "0") : input.value.trim();
+    if (current !== input.dataset.initial) {
+      values[key] = current;
+    }
+  });
+  return values;
+}
+
+async function saveSettings(event) {
+  event.preventDefault();
+  const values = collectSettings();
+  const keys = Object.keys(values);
+  if (!keys.length) {
+    setSettingsStatus("No changes to save.");
+    return;
+  }
+
+  els.settingsSave.disabled = true;
+  setSettingsStatus("Saving…");
+  try {
+    const response = await fetch("/api/config", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ values }),
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || result.error) {
+      throw new Error(result.error || `HTTP ${response.status}`);
+    }
+
+    els.settingsScroll.querySelectorAll("[data-key]").forEach((input) => {
+      if (input.dataset.key in values) {
+        input.dataset.initial =
+          input.dataset.type === "bool" ? (input.checked ? "1" : "0") : input.value.trim();
+      }
+    });
+
+    if (result.restart_required) {
+      setSettingsStatus(
+        `Saved. Restart the app to apply: ${result.restart_keys.join(", ")}.`,
+        "ok"
+      );
+    } else {
+      setSettingsStatus("Saved — applied immediately.", "ok");
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    setSettingsStatus(message, "error");
+  } finally {
+    els.settingsSave.disabled = false;
+  }
+}
+
+els.settingsBtn.addEventListener("click", openSettings);
+els.settingsClose.addEventListener("click", closeSettings);
+els.settingsCancel.addEventListener("click", closeSettings);
+
+els.settingsOverlay.addEventListener("click", (event) => {
+  if (event.target === els.settingsOverlay) closeSettings();
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && !els.settingsOverlay.hidden) {
+    closeSettings();
+  }
+});
+
+els.settingsForm.addEventListener("submit", saveSettings);
+
+els.settingsScroll.addEventListener("click", (event) => {
+  const toggle = event.target.closest(".secret-toggle");
+  if (!toggle) return;
+  const input = toggle.closest(".config-field")?.querySelector("input");
+  if (!input) return;
+  const show = input.type === "password";
+  input.type = show ? "text" : "password";
+  toggle.textContent = show ? "Hide" : "Show";
+});
 
 resizePrompt();
 checkHealth();

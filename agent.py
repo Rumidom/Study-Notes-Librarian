@@ -149,8 +149,8 @@ def _fallback_answer(sources: list[SearchHit], error: str) -> str:
         return (
             "I could not reach the local MiniCPM5-2B model.\n\n"
             f"`{error}`\n\n"
-            "Start the model with `./run.sh` or set `LLM_BACKEND=openai` to use a local "
-            "OpenAI-compatible server."
+            "Start the app with `./run.sh` (or `run.bat` on Windows) so the local "
+            "model is loaded."
         )
 
     local_only = all(hit.engine == "study_cards" for hit in sources)
@@ -174,8 +174,6 @@ def _fallback_answer(sources: list[SearchHit], error: str) -> str:
 class Agent:
     def __init__(self, llm) -> None:
         self.llm = llm
-        self.max_sources = int(os.getenv("MAX_SOURCES", "3"))
-        self.fetch_pages = int(os.getenv("FETCH_PAGES", "3"))
 
     def run(
         self,
@@ -184,6 +182,7 @@ class Agent:
         search_study_cards_first: bool = True,
     ) -> dict:
         started = time.monotonic()
+        max_sources = int(os.getenv("MAX_SOURCES", "3"))
         clean_history = self._clean_history(history)
         steps: list[dict] = [
             _step("input", "Question received", message[:220]),
@@ -233,7 +232,7 @@ class Agent:
             )
 
         if check_cards and base_query:
-            local_hits = search_study_cards(base_query, limit=self.max_sources)
+            local_hits = search_study_cards(base_query, limit=max_sources)
             if local_hits:
                 names = ", ".join(hit.title for hit in local_hits[:3])
                 steps.append(
@@ -284,8 +283,8 @@ class Agent:
             sources, engine_info = search_web(
                 queries,
                 limit=5,
-                max_sources=self.max_sources,
-                fetch_top=self.fetch_pages,
+                max_sources=max_sources,
+                fetch_top=max_sources,
             )
 
             ddg = engine_info["duckduckgo"]
@@ -334,7 +333,7 @@ class Agent:
                     _step(
                         "read",
                         "Read top sources",
-                        f"{fetched}/{min(len(sources), self.fetch_pages)} pages readable · "
+                        f"{fetched}/{min(len(sources), max_sources)} pages readable · "
                         f"{sum(1 for hit in sources if hit.code)} code excerpts",
                         "done" if fetched else "skipped",
                     )
@@ -441,7 +440,7 @@ class Agent:
             "tools": tools,
             "steps": steps,
             "model": getattr(self.llm, "model", "MiniCPM5-2B"),
-            "backend": "llama.cpp" if self.llm.__class__.__name__ == "LocalLlamaClient" else "openai",
+            "backend": "llama.cpp",
             "elapsed_ms": int((time.monotonic() - started) * 1000),
             "llm_failed": llm_failed,
             "search_study_cards_first": search_study_cards_first,

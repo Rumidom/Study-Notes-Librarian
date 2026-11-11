@@ -28,6 +28,12 @@
           <span class="status-dot" aria-hidden="true"></span>
           <span id="statusText">Checking model…</span>
         </div>
+        <button class="icon-btn" id="settingsBtn" type="button" aria-label="Open settings" title="Settings">
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" aria-hidden="true">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.08a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.08a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.08a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
       </div>
     </header>
 
@@ -90,6 +96,34 @@
         </div>
       </aside>
     </main>
+  </div>
+
+  <div class="settings-overlay" id="settingsOverlay" hidden>
+    <section class="settings-modal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+      <header class="settings-head">
+        <div>
+          <span class="eyebrow">Settings</span>
+        </div>
+        <button class="icon-btn" id="settingsClose" type="button" aria-label="Close settings">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" aria-hidden="true">
+            <path d="M18 6 6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+      </header>
+
+      <p class="settings-sub">Changes are saved to <code>.env</code> in the app folder.</p>
+
+      <form id="settingsForm" autocomplete="off">
+        <div class="settings-scroll" id="settingsScroll"></div>
+        <footer class="settings-foot">
+          <span class="settings-status" id="settingsStatus"></span>
+          <div class="settings-actions">
+            <button class="ghost-btn" type="button" id="settingsCancel">Close</button>
+            <button class="save-btn" type="submit" id="settingsSave">Save changes</button>
+          </div>
+        </footer>
+      </form>
+    </section>
   </div>
 
   <script src="{{ url_for('static', filename='vendor/marked.umd.js') }}"></script>
