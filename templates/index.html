@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark">
   <title>Study Notes Librarian · {{ model }}</title>
+  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='vendor/github-markdown-dark.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='vendor/highlight-github-dark.min.css') }}">
@@ -76,19 +77,35 @@
         </div>
 
         <div class="card-editor-view" id="cardEditorView" role="tabpanel" aria-labelledby="tabCardEditor" hidden>
-          <div class="card-editor-split">
-            <section class="card-editor-pane" aria-label="Markdown source">
+          <div class="card-editor-split" id="cardEditorSplit">
+            <section class="card-editor-pane card-source-pane" aria-label="Markdown source">
               <div class="card-pane-head">
                 <span>Markdown</span>
+                <button class="card-pane-toggle" id="cardPaneToggle" type="button" aria-label="Hide markdown editor" aria-expanded="true">
+                  <svg class="icon-minus" viewBox="0 0 24 24" width="14" height="14" fill="none" aria-hidden="true">
+                    <path d="M5 12h14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                  <svg class="icon-plus" viewBox="0 0 24 24" width="14" height="14" fill="none" aria-hidden="true">
+                    <path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                </button>
               </div>
               <input class="card-name-input" id="cardName"  placeholder="card name" autocomplete="off" spellcheck="false">
-              <div style="height: 5px;"></div>
+              <div class="card-name-spacer" style="height: 5px;"></div>
               <textarea class="card-editor-input" id="cardMarkdown" spellcheck="false" placeholder="# Markdown Sample&#10;&#10;## h2 Heading&#10;### h3 Heading&#10;#### h4 Heading&#10;##### h5 Heading&#10;###### h6 Heading&#10;&#10;**This is bold text**&#10;*This is italic text*&#10;~~Strikethrough~~&#10;- bullet points&#10;&#10;## Tasks&#10;- [x] task 1&#10;- [ ] task 2&#10;&#10;[link](https://www.google.com)&#10;&#10;![image example](</study_cards/Sample Card Folder/images/snowflakes.png>)&#10;&#10;| Tables        | Are           | Cool  |&#10;| ------------- |:-------------:| -----:|&#10;| col 3 is      | right-aligned | $1600 |&#10;| col 2 is      | centered      |   $12 |&#10;| zebra stripes | are neat      |    $1 |"></textarea>
             </section>
             <div class="card-editor-divider" aria-hidden="true"></div>
-            <section class="card-editor-pane" aria-label="Rendered preview">
+            <section class="card-editor-pane card-preview-pane" aria-label="Rendered preview">
               <div class="card-pane-head">
                 <span>Preview</span>
+                <button class="card-pane-toggle" id="cardPreviewToggle" type="button" aria-label="Hide preview" aria-expanded="true">
+                  <svg class="icon-minus" viewBox="0 0 24 24" width="14" height="14" fill="none" aria-hidden="true">
+                    <path d="M5 12h14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                  <svg class="icon-plus" viewBox="0 0 24 24" width="14" height="14" fill="none" aria-hidden="true">
+                    <path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                </button>
               </div>
               <div class="card-editor-preview bubble" id="cardPreview">
                 <p class="card-preview-empty">Rendered Markdown appears here.</p>
@@ -175,6 +192,17 @@
           </div>
         </footer>
       </form>
+    </section>
+  </div>
+
+  <div class="confirm-overlay" id="confirmOverlay" hidden>
+    <section class="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
+      <h2 class="confirm-title" id="confirmTitle">Delete card</h2>
+      <p class="confirm-message" id="confirmMessage"></p>
+      <div class="confirm-actions">
+        <button class="ghost-btn" type="button" id="confirmCancel">Cancel</button>
+        <button class="danger-btn" type="button" id="confirmOk">Delete</button>
+      </div>
     </section>
   </div>
 

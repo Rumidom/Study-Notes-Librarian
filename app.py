@@ -325,6 +325,32 @@ def save_study_card():
     return jsonify({"ok": True, "name": path.name, "path": f"/study_cards/{quote(relative)}"})
 
 
+@app.delete("/api/study-card")
+def delete_study_card():
+    payload = request.get_json(silent=True) or {}
+    relative = payload.get("path")
+
+    if not isinstance(relative, str) or not relative.strip():
+        return jsonify({"error": "Card path is required."}), 400
+
+    root = tools.STUDY_CARDS_DIR.resolve()
+    try:
+        target = (root / relative).resolve()
+        target.relative_to(root)
+    except (OSError, ValueError):
+        return jsonify({"error": "Invalid card path."}), 400
+
+    if target.suffix.lower() != ".md" or not target.is_file():
+        return jsonify({"error": "Card not found."}), 404
+
+    try:
+        target.unlink()
+    except OSError as exc:
+        return jsonify({"error": f"Could not delete card: {exc}"}), 500
+
+    return jsonify({"ok": True})
+
+
 @app.get("/api/config")
 def get_config():
     groups = []

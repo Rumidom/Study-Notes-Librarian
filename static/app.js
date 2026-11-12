@@ -23,6 +23,9 @@ const elemts = {
   tabCardEditor: document.getElementById("tabCardEditor"),
   conversationView: document.getElementById("conversationView"),
   cardEditorView: document.getElementById("cardEditorView"),
+  cardEditorSplit: document.getElementById("cardEditorSplit"),
+  cardPaneToggle: document.getElementById("cardPaneToggle"),
+  cardPreviewToggle: document.getElementById("cardPreviewToggle"),
   cardMarkdown: document.getElementById("cardMarkdown"),
   cardPreview: document.getElementById("cardPreview"),
   cardFolder: document.getElementById("cardFolder"),
@@ -43,6 +46,10 @@ const elemts = {
   settingsScroll: document.getElementById("settingsScroll"),
   settingsStatus: document.getElementById("settingsStatus"),
   settingsSave: document.getElementById("settingsSave"),
+  confirmOverlay: document.getElementById("confirmOverlay"),
+  confirmMessage: document.getElementById("confirmMessage"),
+  confirmCancel: document.getElementById("confirmCancel"),
+  confirmOk: document.getElementById("confirmOk"),
 };
 
 const emptyTraceHTML = elemts.traceScroll.innerHTML;
@@ -757,6 +764,32 @@ function renderCardPreview() {
 
 elemts.cardMarkdown.addEventListener("input", renderCardPreview);
 
+function setCardPaneCollapsed(collapsed) {
+  elemts.cardEditorSplit.classList.toggle("source-collapsed", collapsed);
+  elemts.cardPaneToggle.setAttribute("aria-expanded", String(!collapsed));
+  elemts.cardPaneToggle.setAttribute(
+    "aria-label",
+    collapsed ? "Show markdown editor" : "Hide markdown editor"
+  );
+}
+
+function setPreviewPaneCollapsed(collapsed) {
+  elemts.cardEditorSplit.classList.toggle("preview-collapsed", collapsed);
+  elemts.cardPreviewToggle.setAttribute("aria-expanded", String(!collapsed));
+  elemts.cardPreviewToggle.setAttribute(
+    "aria-label",
+    collapsed ? "Show preview" : "Hide preview"
+  );
+}
+
+elemts.cardPaneToggle.addEventListener("click", () => {
+  setCardPaneCollapsed(!elemts.cardEditorSplit.classList.contains("source-collapsed"));
+});
+
+elemts.cardPreviewToggle.addEventListener("click", () => {
+  setPreviewPaneCollapsed(!elemts.cardEditorSplit.classList.contains("preview-collapsed"));
+});
+
 elemts.cardSaveBtn.addEventListener("click", async () => {
   if (!elemts.cardMarkdown.value.trim()) {
     //setCardStatus("Nothing to save yet.", "error");
@@ -857,21 +890,35 @@ function renderCardBrowser(cards, folders) {
       head.textContent = folder || "study_cards/";
       group.appendChild(head);
       groups.get(folder).forEach((card) => {
-        const button = document.createElement("button");
-        button.type = "button";
-        button.className = "card-browser-item";
-        button.dataset.path = card.path;
-        button.innerHTML =
+        const item = document.createElement("div");
+        item.className = "card-browser-item";
+        item.dataset.path = card.path;
+
+        const open = document.createElement("button");
+        open.type = "button";
+        open.className = "card-browser-open";
+        open.innerHTML =
           '<span class="card-browser-dot" aria-hidden="true"></span>' +
           `<span class="card-browser-name">${escapeHtml(card.name)}</span>`;
-        button.addEventListener("click", () => loadCardIntoEditor(card, button));
-        group.appendChild(button);
+        open.addEventListener("click", () => loadCardIntoEditor(card, item));
+
+        const remove = document.createElement("button");
+        remove.type = "button";
+        remove.className = "card-browser-delete";
+        remove.setAttribute("aria-label", `Delete ${card.name}`);
+        remove.innerHTML =
+          '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" aria-hidden="true">' +
+          '<path d="M18 6 6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+        remove.addEventListener("click", () => confirmDeleteCard(card, item));
+
+        item.append(open, remove);
+        group.appendChild(item);
       });
       elemts.cardBrowserList.appendChild(group);
     });
 }
 
-async function loadCardIntoEditor(card, button) {
+async function loadCardIntoEditor(card, item) {
   try {
     const response = await fetch(card.url);
     if (!response.ok) throw new Error(`Could not open ${card.name} (${response.status}).`);
@@ -882,11 +929,37 @@ async function loadCardIntoEditor(card, button) {
     elemts.cardName.value = card.name || "";
     elemts.cardBrowserList
       .querySelectorAll(".card-browser-item.active")
-      .forEach((item) => item.classList.remove("active"));
-    button.classList.add("active");
+      .forEach((entry) => entry.classList.remove("active"));
+    item.classList.add("active");
     setTopbarNote(`Loaded ${card.name}`, `Loaded ${card.path}`);
   } catch (error) {
     setCardBrowserStatus(error.message || "Could not open card.", "error");
+  }
+}
+
+function confirmDeleteCard(card, item) {
+  openConfirm(`Delete "${card.name}"? This cannot be undone.`, () => deleteCard(card, item));
+}
+
+async function deleteCard(card, item) {
+  try {
+    const response = await fetch("/api/study-card", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path: card.path }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || `Delete failed (${response.status}).`);
+    if (item.classList.contains("active")) {
+      elemts.cardMarkdown.value = "";
+      elemts.cardName.value = "";
+      state.cardName = null;
+      renderCardPreview();
+    }
+    setTopbarNote(`Deleted ${card.name}`);
+    loadCardBrowser();
+  } catch (error) {
+    setCardBrowserStatus(error.message || "Could not delete card.", "error");
   }
 }
 
@@ -1095,8 +1168,37 @@ elemts.settingsOverlay.addEventListener("click", (event) => {
   if (event.target === elemts.settingsOverlay) closeSettings();
 });
 
+let confirmAction = null;
+
+function openConfirm(message, onConfirm) {
+  confirmAction = onConfirm;
+  elemts.confirmMessage.textContent = message;
+  elemts.confirmOverlay.hidden = false;
+  elemts.confirmOk.focus();
+}
+
+function closeConfirm() {
+  elemts.confirmOverlay.hidden = true;
+  confirmAction = null;
+}
+
+elemts.confirmCancel.addEventListener("click", closeConfirm);
+
+elemts.confirmOverlay.addEventListener("click", (event) => {
+  if (event.target === elemts.confirmOverlay) closeConfirm();
+});
+
+elemts.confirmOk.addEventListener("click", () => {
+  const action = confirmAction;
+  closeConfirm();
+  if (action) action();
+});
+
 document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape" && !elemts.settingsOverlay.hidden) {
+  if (event.key !== "Escape") return;
+  if (!elemts.confirmOverlay.hidden) {
+    closeConfirm();
+  } else if (!elemts.settingsOverlay.hidden) {
     closeSettings();
   }
 });

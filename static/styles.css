@@ -336,6 +336,28 @@ button {
   grid-template-columns: minmax(0, 1fr) 1px minmax(0, 1fr);
 }
 
+.card-editor-split.source-collapsed {
+  grid-template-columns: auto 1px minmax(0, 1fr);
+}
+
+.card-editor-split.preview-collapsed {
+  grid-template-columns: minmax(0, 1fr) 1px auto;
+}
+
+.card-editor-split.source-collapsed .card-source-pane .card-name-input,
+.card-editor-split.source-collapsed .card-source-pane .card-editor-input,
+.card-editor-split.source-collapsed .card-source-pane .card-name-spacer,
+.card-editor-split.source-collapsed .card-source-pane .card-pane-head > span,
+.card-editor-split.preview-collapsed .card-preview-pane .card-editor-preview,
+.card-editor-split.preview-collapsed .card-preview-pane .card-pane-head > span {
+  display: none;
+}
+
+.card-editor-split.source-collapsed .card-preview-pane .card-pane-toggle,
+.card-editor-split.preview-collapsed .card-source-pane .card-pane-toggle {
+  display: none;
+}
+
 .card-editor-pane {
   display: flex;
   flex-direction: column;
@@ -357,6 +379,47 @@ button {
   text-transform: uppercase;
 }
 
+.card-pane-toggle {
+  flex: 0 0 auto;
+  align-self: center;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: rgba(33, 27, 22, 0.78);
+  color: var(--muted);
+  cursor: pointer;
+  transition: 160ms ease;
+}
+
+.card-pane-toggle:hover {
+  color: var(--text);
+  border-color: var(--line-strong);
+  background: var(--panel-2);
+}
+
+.card-pane-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.card-pane-toggle .icon-plus {
+  display: none;
+}
+
+.card-editor-split.source-collapsed .card-source-pane .card-pane-toggle .icon-minus,
+.card-editor-split.preview-collapsed .card-preview-pane .card-pane-toggle .icon-minus {
+  display: none;
+}
+
+.card-editor-split.source-collapsed .card-source-pane .card-pane-toggle .icon-plus,
+.card-editor-split.preview-collapsed .card-preview-pane .card-pane-toggle .icon-plus {
+  display: block;
+}
+
 .card-pane-hint {
   color: var(--muted-2);
   font-size: 10px;
@@ -375,7 +438,7 @@ button {
   width: 100%;
   padding: 13px 14px;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: 7px;
   background: rgba(23, 19, 16, 0.65);
   color: var(--text);
   font-family: var(--mono);
@@ -392,13 +455,13 @@ button {
   border-color: var(--line-strong);
 }
 
-.card-editor-preview {
+.card-editor-preview.bubble {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
   padding: 13px 14px;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: 7px;
   background: rgba(38, 31, 25, 0.55);
   scrollbar-width: thin;
   scrollbar-color: rgba(214, 192, 168, 0.23) transparent;
@@ -479,7 +542,7 @@ button {
   width: 100%;
   padding: 9px 12px;
   border: 1px solid var(--line);
-  border-radius: 9px;
+  border-radius: 7px;
   background: rgba(23, 19, 16, 0.65);
   color: var(--text);
   font-family: var(--mono);
@@ -915,29 +978,71 @@ button {
 .card-browser-item {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 2px;
   width: 100%;
-  padding: 8px 10px;
   border: 1px solid transparent;
   border-radius: 9px;
-  background: transparent;
-  color: var(--muted);
-  font-size: 12.5px;
-  text-align: left;
-  cursor: pointer;
   transition: 160ms ease;
 }
 
 .card-browser-item:hover {
   border-color: var(--line);
   background: var(--accent-soft);
-  color: var(--text);
 }
 
 .card-browser-item.active {
   border-color: var(--line);
   background: var(--accent-soft);
+}
+
+.card-browser-open {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+  transition: color 160ms ease;
+}
+
+.card-browser-item:hover .card-browser-open {
+  color: var(--text);
+}
+
+.card-browser-item.active .card-browser-open {
   color: var(--accent);
+}
+
+.card-browser-delete {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  margin-right: 4px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted-2);
+  cursor: pointer;
+  opacity: 0.5;
+  transition: 160ms ease;
+}
+
+.card-browser-delete:hover,
+.card-browser-delete:focus-visible {
+  opacity: 1;
+  color: var(--danger);
+  border-color: var(--line);
+  background: var(--danger-soft);
 }
 
 .card-browser-dot {
@@ -1420,6 +1525,70 @@ button {
   box-shadow: 0 30px 90px rgba(0, 0, 0, 0.5);
 }
 
+.confirm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(12, 9, 7, 0.62);
+  backdrop-filter: blur(8px);
+}
+
+.confirm-overlay[hidden] {
+  display: none;
+}
+
+.confirm-modal {
+  width: min(400px, 100%);
+  padding: 20px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--panel-solid);
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.5);
+}
+
+.confirm-title {
+  margin: 0 0 8px;
+  font-family: var(--serif);
+  font-size: 17px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.confirm-message {
+  margin: 0 0 18px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.danger-btn {
+  padding: 7px 13px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--danger-soft);
+  color: var(--danger);
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: 160ms ease;
+}
+
+.danger-btn:hover {
+  border-color: var(--danger);
+  background: rgba(224, 127, 111, 0.22);
+}
+
 .settings-head {
   flex: 0 0 auto;
   display: flex;
@@ -1672,6 +1841,16 @@ button {
   .card-editor-split {
     grid-template-columns: 1fr;
     grid-template-rows: minmax(0, 1fr) 1px minmax(0, 1fr);
+  }
+
+  .card-editor-split.source-collapsed {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1px minmax(0, 1fr);
+  }
+
+  .card-editor-split.preview-collapsed {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(0, 1fr) 1px auto;
   }
 
   .trace-panel {
