@@ -19,8 +19,7 @@ HTTP_TIMEOUT = float(os.getenv("HTTP_TIMEOUT", "10"))
 MAX_PAGE_CHARS = int(os.getenv("MAX_PAGE_CHARS", "4500"))
 
 BASE_DIR = Path(__file__).resolve().parent
-_STUDY_DIR = Path(os.getenv("STUDY_CARDS_DIR", "study_cards"))
-STUDY_CARDS_DIR = _STUDY_DIR if _STUDY_DIR.is_absolute() else BASE_DIR / _STUDY_DIR
+STUDY_CARDS_DIR = BASE_DIR / "study_cards"
 STUDY_CARD_MAX_BYTES = int(os.getenv("STUDY_CARD_MAX_BYTES", str(1024 * 1024)))
 
 STUDY_STOPWORDS = {

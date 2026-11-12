@@ -61,18 +61,6 @@ CONFIG_GROUPS = [
         ],
     },
     {
-        "name": "Study cards",
-        "fields": [
-            {
-                "key": "STUDY_CARDS_DIR",
-                "label": "Study cards folder",
-                "type": "text",
-                "default": "study_cards",
-                "hint": "Checked recursively before any web search. Relative paths resolve from the app folder.",
-            },
-        ],
-    },
-    {
         "name": "Model",
         "hint": "Model and server settings apply after a restart.",
         "restart": True,
@@ -88,32 +76,11 @@ CONFIG_GROUPS = [
                 "restart": False,
             },
             {
-                "key": "MODEL_REPO",
-                "label": "Model repository",
-                "type": "text",
-                "default": "openbmb/MiniCPM5-2B-GGUF",
-                "hint": "Hugging Face GGUF repository the weights come from.",
-            },
-            {
                 "key": "MODEL_FILE",
                 "label": "Model file",
                 "type": "text",
                 "default": "MiniCPM5-2B-Q4_K_M.gguf",
                 "hint": "GGUF file downloaded from the repository.",
-            },
-            {
-                "key": "MODEL_DIR",
-                "label": "Model directory",
-                "type": "text",
-                "default": "models",
-                "hint": "Where model weights are stored.",
-            },
-            {
-                "key": "AUTO_DOWNLOAD",
-                "label": "Auto download",
-                "type": "bool",
-                "default": "1",
-                "hint": "Download missing weights automatically at startup.",
             },
             {
                 "key": "N_CTX",
@@ -223,8 +190,6 @@ def _normalize_setting(field, raw) -> tuple[str | None, str]:
 
 
 def _apply_live_config() -> None:
-    cards_dir = Path(os.environ.get("STUDY_CARDS_DIR", "study_cards"))
-    tools.STUDY_CARDS_DIR = cards_dir if cards_dir.is_absolute() else BASE_DIR / cards_dir
     tools.HTTP_TIMEOUT = float(os.environ.get("HTTP_TIMEOUT", "10"))
 
 

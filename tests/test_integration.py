@@ -188,7 +188,7 @@ class AppTests(unittest.TestCase):
 
     def test_config_lists_groups(self):
         body = self.client.get("/api/config").get_json()
-        self.assertEqual(len(body["groups"]), 4)
+        self.assertEqual(len(body["groups"]), 3)
 
     def test_study_cards_are_listed(self):
         body = self.client.get("/api/study-cards").get_json()

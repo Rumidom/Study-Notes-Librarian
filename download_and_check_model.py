@@ -28,10 +28,6 @@ def model_path() -> Path:
     return Path(os.getenv("MODEL_PATH", str(directory / model_file())))
 
 
-def auto_download() -> bool:
-    return os.getenv("AUTO_DOWNLOAD", "1").strip().lower() not in {"0", "false", "no"}
-
-
 def model_url() -> str:
     return f"https://huggingface.co/{model_repo()}/resolve/main/{model_file()}"
 
@@ -63,11 +59,6 @@ def ensure_model(progress=None) -> Path:
 
     if model_ready():
         return path
-
-    if not auto_download():
-        raise FileNotFoundError(
-            f"Model not found at {path}. Run `python download_and_check_model.py` or set AUTO_DOWNLOAD=1."
-        )
 
     path.parent.mkdir(parents=True, exist_ok=True)
     part = path.with_suffix(path.suffix + ".part")

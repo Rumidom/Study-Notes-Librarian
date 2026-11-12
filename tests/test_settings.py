@@ -69,7 +69,6 @@ class ConfigTestCase(unittest.TestCase):
         }
         self.addCleanup(self._restore_environment)
 
-        self._original_cards_dir = tools.STUDY_CARDS_DIR
         self._original_http_timeout = tools.HTTP_TIMEOUT
         self.addCleanup(self._restore_tools)
 
@@ -84,7 +83,6 @@ class ConfigTestCase(unittest.TestCase):
                 os.environ[key] = value
 
     def _restore_tools(self):
-        tools.STUDY_CARDS_DIR = self._original_cards_dir
         tools.HTTP_TIMEOUT = self._original_http_timeout
 
     def get_config(self) -> dict:
@@ -105,12 +103,12 @@ class GetConfigTests(ConfigTestCase):
         self.assertEqual(body["env_path"], str(self.env_path))
         self.assertEqual(
             [group["name"] for group in body["groups"]],
-            ["Web search", "Study cards", "Model", "Server"],
+            ["Web search", "Model", "Server"],
         )
 
         fields = config_fields(body)
         self.assertEqual(fields["BRAVE_API_KEY"]["type"], "secret")
-        self.assertEqual(fields["AUTO_DOWNLOAD"]["type"], "bool")
+        self.assertEqual(fields["FLASK_DEBUG"]["type"], "bool")
         self.assertEqual(fields["MAX_SOURCES"]["type"], "int")
         self.assertEqual(fields["MAX_SOURCES"]["min"], 1)
         self.assertEqual(fields["MAX_SOURCES"]["max"], 10)
@@ -149,15 +147,15 @@ class NormalizeSettingTests(unittest.TestCase):
 
     def test_bool_truthy_variants(self):
         for raw in ("1", "true", "YES", " on "):
-            self.assertEqual(self.normalize("AUTO_DOWNLOAD", raw), (None, "1"), raw)
+            self.assertEqual(self.normalize("FLASK_DEBUG", raw), (None, "1"), raw)
 
     def test_bool_falsy_variants(self):
         for raw in ("0", "false", "no", "off", ""):
-            self.assertEqual(self.normalize("AUTO_DOWNLOAD", raw), (None, "0"), raw)
+            self.assertEqual(self.normalize("FLASK_DEBUG", raw), (None, "0"), raw)
 
     def test_bool_invalid(self):
         self.assertEqual(
-            self.normalize("AUTO_DOWNLOAD", "maybe"), ("must be a boolean", "maybe")
+            self.normalize("FLASK_DEBUG", "maybe"), ("must be a boolean", "maybe")
         )
 
     def test_int_is_trimmed_and_normalized(self):
@@ -173,11 +171,11 @@ class NormalizeSettingTests(unittest.TestCase):
             self.assertIn("between 1 and 10", error)
 
     def test_text_cannot_be_empty_except_the_secret(self):
-        self.assertEqual(self.normalize("STUDY_CARDS_DIR", "   "), ("cannot be empty", ""))
+        self.assertEqual(self.normalize("MODEL_FILE", "   "), ("cannot be empty", ""))
         self.assertEqual(self.normalize("BRAVE_API_KEY", ""), (None, ""))
 
     def test_text_too_long(self):
-        error, _ = self.normalize("STUDY_CARDS_DIR", "x" * 201)
+        error, _ = self.normalize("MODEL_FILE", "x" * 201)
         self.assertIn("too long", error)
 
 
@@ -203,26 +201,17 @@ class SaveConfigTests(ConfigTestCase):
         self.assertEqual(body["restart_keys"], ["N_CTX"])
 
     def test_normalizes_booleans_and_integers_before_writing(self):
-        response = self.save({"AUTO_DOWNLOAD": "yes", "MAX_SOURCES": " 6 "})
+        response = self.save({"FLASK_DEBUG": "yes", "MAX_SOURCES": " 6 "})
 
         self.assertEqual(response.status_code, 200)
         saved = self.saved_env()
-        self.assertEqual(saved["AUTO_DOWNLOAD"], "1")
+        self.assertEqual(saved["FLASK_DEBUG"], "1")
         self.assertEqual(saved["MAX_SOURCES"], "6")
 
     def test_round_trips_through_get_config(self):
         self.save({"MAX_SOURCES": "8"})
 
         self.assertEqual(config_fields(self.get_config())["MAX_SOURCES"]["value"], "8")
-
-    def test_applies_study_cards_dir_immediately(self):
-        folder = Path(self._tmp.name) / "cards"
-        folder.mkdir()
-
-        response = self.save({"STUDY_CARDS_DIR": str(folder)})
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(tools.STUDY_CARDS_DIR, folder)
 
     def test_applies_http_timeout_immediately(self):
         self.save({"HTTP_TIMEOUT": "22"})
@@ -255,13 +244,13 @@ class SaveConfigTests(ConfigTestCase):
         self.assertEqual(self.save({"MAX_SOURCES": "999"}).status_code, 400)
 
     def test_invalid_bool_is_rejected_with_the_label(self):
-        response = self.save({"AUTO_DOWNLOAD": "perhaps"})
+        response = self.save({"FLASK_DEBUG": "perhaps"})
 
         self.assertEqual(response.status_code, 400)
-        self.assertIn("Auto download", response.get_json()["error"])
+        self.assertIn("Debug mode", response.get_json()["error"])
 
     def test_empty_text_rejected_but_empty_secret_allowed(self):
-        self.assertEqual(self.save({"STUDY_CARDS_DIR": ""}).status_code, 400)
+        self.assertEqual(self.save({"MODEL_FILE": ""}).status_code, 400)
         self.assertEqual(self.save({"BRAVE_API_KEY": ""}).status_code, 200)
 
     def test_validation_error_writes_nothing(self):
