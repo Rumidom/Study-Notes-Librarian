@@ -382,6 +382,7 @@ button {
 .card-pane-toggle {
   flex: 0 0 auto;
   align-self: center;
+  margin-left: auto;
   display: grid;
   place-items: center;
   width: 22px;
@@ -1887,9 +1888,7 @@ button {
   }
 
   .status-pill {
-    max-width: 42vw;
-    padding: 7px 9px;
-    font-size: 10.5px;
+    display: none;
   }
 
   .topbar-note {
@@ -1931,6 +1930,10 @@ button {
   .card-folder-input {
     flex: 1 1 auto;
     width: auto;
+  }
+
+  .card-editor-note {
+    display: none;
   }
 
   .settings-overlay {
