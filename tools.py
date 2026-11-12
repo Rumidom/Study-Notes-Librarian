@@ -27,11 +27,12 @@ STUDY_STOPWORDS = {
     "a", "an", "the", "i", "you", "me", "my", "we", "our", "it", "this",
     "that", "is", "are", "was", "were", "be", "been", "being", "do", "does",
     "did", "how", "what", "when", "where", "which", "who", "why", "to",
-    "of", "in", "on", "at", "by", "with", "about", "please", "can", "could",
+    "of", "for", "in", "on", "at", "by", "with", "about", "please", "can", "could",
     "should", "would", "will", "tell", "give", "show", "explain", "need",
     "want", "using", "and", "or", "if", "then", "than",
 }
 TOKEN_RE = re.compile(r"[a-z0-9]+")
+STRONG_TOKEN_RE = re.compile(r"[a-z]+\d|\d+[a-z]")
 
 
 @dataclass
@@ -84,6 +85,10 @@ def _query_terms(query: str) -> list[str]:
     return terms
 
 
+def _is_strong(term: str) -> bool:
+    return len(term) >= 3 and bool(STRONG_TOKEN_RE.search(term))
+
+
 def _iter_study_cards(root: Path):
     try:
         paths = root.rglob("*")
@@ -121,13 +126,67 @@ def _study_card_code(content: str) -> str:
     return "\n\n".join(cleaned[:3])[:MAX_PAGE_CHARS]
 
 
-def search_study_cards(query: str, limit: int = 5) -> list[SearchHit]:
-    if not query.strip() or not STUDY_CARDS_DIR.exists():
-        return []
+def _phrase_in(needle: list[str], haystack: list[str]) -> bool:
+    if not needle or len(needle) > len(haystack):
+        return False
+    for start in range(len(haystack) - len(needle) + 1):
+        if haystack[start : start + len(needle)] == needle:
+            return True
+    return False
 
+
+def _card_score(
+    path: Path, content: str, terms: list[str], query_tokens: list[str]
+) -> float | None:
+    if not terms:
+        return None
+
+    name_token_list = _tokens(path.stem)
+    content_token_list = _tokens(content)
+    name_tokens = set(name_token_list)
+    content_tokens = set(content_token_list)
+
+    matched_name = [term for term in terms if term in name_tokens]
+    matched_content = [term for term in terms if term in content_tokens]
+
+    coverage_terms = [term for term in terms if len(term) >= 3] or terms
+    name_coverage = (
+        len([term for term in coverage_terms if term in name_tokens]) / len(coverage_terms)
+    )
+    total_coverage = (
+        len({term for term in coverage_terms if term in name_tokens or term in content_tokens})
+        / len(coverage_terms)
+    )
+    matched_primary_content = [term for term in coverage_terms if term in content_tokens]
+
+    phrase_in_name = _phrase_in(query_tokens, name_token_list)
+    phrase_in_content = _phrase_in(query_tokens, content_token_list)
+    strong_in_name = any(_is_strong(term) and term in name_tokens for term in terms)
+
+    matched = (
+        phrase_in_name
+        or phrase_in_content
+        or strong_in_name
+        or name_coverage >= 0.5
+        or (total_coverage >= 0.6 and len(matched_primary_content) >= 2)
+    )
+    if not matched:
+        return None
+
+    return (
+        (6 if phrase_in_name else 0)
+        + (3 if phrase_in_content else 0)
+        + (4 if strong_in_name else 0)
+        + len(matched_name) * 3
+        + len(matched_content)
+        + name_coverage
+    )
+
+
+def _search_cards(query: str, limit: int) -> list[tuple[float, str, Path, str, Path]]:
     terms = _query_terms(query)
-    query_phrase = " ".join(_tokens(query))
-    if not terms and not query_phrase:
+    query_tokens = _tokens(query)
+    if not terms:
         return []
 
     scored: list[tuple[float, str, Path, str, Path]] = []
@@ -136,52 +195,18 @@ def search_study_cards(query: str, limit: int = 5) -> list[SearchHit]:
         if not content:
             continue
 
-        name_tokens = set(_tokens(path.stem))
-        content_tokens = set(_tokens(content))
-        matched_name = [term for term in terms if term in name_tokens]
-        matched_content = [term for term in terms if term in content_tokens]
-        name_phrase = " ".join(_tokens(path.stem))
-        content_phrase = " ".join(_tokens(content))
-
-        coverage_terms = [term for term in terms if len(term) >= 3] or terms
-        name_coverage = (
-            len([term for term in coverage_terms if term in name_tokens]) / len(coverage_terms)
-            if coverage_terms
-            else 0.0
-        )
-        total_coverage = (
-            len({term for term in coverage_terms if term in name_tokens or term in content_tokens})
-            / len(coverage_terms)
-            if coverage_terms
-            else 0.0
-        )
-        matched_primary_content = [
-            term for term in coverage_terms if term in content_tokens
-        ]
-
-        phrase_in_name = bool(query_phrase) and query_phrase in name_phrase
-        phrase_in_content = bool(query_phrase) and query_phrase in content_phrase
-
-        matched = (
-            phrase_in_name
-            or phrase_in_content
-            or name_coverage >= 0.5
-            or (total_coverage >= 0.6 and len(matched_primary_content) >= 2)
-        )
-        if not matched:
+        score = _card_score(path, content, terms, query_tokens)
+        if score is None:
             continue
-
-        score = (
-            (6 if phrase_in_name else 0)
-            + (3 if phrase_in_content else 0)
-            + len(matched_name) * 3
-            + len(matched_content)
-            + name_coverage
-        )
         scored.append((score, str(relative).lower(), path, content, relative))
 
     scored.sort(key=lambda item: (-item[0], item[1]))
+    return scored[:limit]
 
+
+def _hits_from(
+    scored: list[tuple[float, str, Path, str, Path]], limit: int
+) -> list[SearchHit]:
     hits: list[SearchHit] = []
     for _, _, path, content, relative in scored[:limit]:
         hits.append(
@@ -196,6 +221,29 @@ def search_study_cards(query: str, limit: int = 5) -> list[SearchHit]:
             )
         )
     return hits
+
+
+def search_study_cards(query: str, limit: int = 5) -> list[SearchHit]:
+    if not query.strip() or not STUDY_CARDS_DIR.exists():
+        return []
+    return _hits_from(_search_cards(query, limit), limit)
+
+
+def search_study_cards_multi(queries: list[str], limit: int = 5) -> list[SearchHit]:
+    if not STUDY_CARDS_DIR.exists():
+        return []
+
+    best: dict[str, tuple[float, str, Path, str, Path]] = {}
+    for query in queries:
+        if not query.strip():
+            continue
+        for entry in _search_cards(query, limit):
+            key = str(entry[4])
+            if key not in best or entry[0] > best[key][0]:
+                best[key] = entry
+
+    ranked = sorted(best.values(), key=lambda item: (-item[0], item[1]))
+    return _hits_from(ranked, limit)
 
 
 def _duckduckgo_html(query: str, limit: int) -> list[SearchHit]:

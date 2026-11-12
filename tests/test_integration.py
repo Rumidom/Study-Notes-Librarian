@@ -6,6 +6,7 @@ import time
 import unittest
 
 import download_and_check_model
+import tools
 from agent import Agent
 
 
@@ -39,7 +40,7 @@ class AgentTests(unittest.TestCase):
         agent.close()
         self.assertEqual(agent.get_health(), "inactive")
 
-    def test_study_card_match_does_not_load_model(self):
+    def test_study_card_match_uses_model_keywords(self):
         agent = Agent()
         self.addCleanup(agent.close)
 
@@ -47,7 +48,28 @@ class AgentTests(unittest.TestCase):
 
         self.assertTrue(result["sources"])
         self.assertEqual(result["sources"][0]["engine"], "study_cards")
-        self.assertIsNone(agent._llm)
+        self.assertIn("search_keywords", [tool["name"] for tool in result["tools"]])
+        self.assertIsNotNone(agent._llm)
+
+    def test_extract_keywords_returns_tool_call(self):
+        agent = Agent()
+        self.addCleanup(agent.close)
+
+        tool_call = agent.extract_keywords("what is the pin-out for the 74HC00 chip")
+
+        self.assertIsNotNone(tool_call)
+        self.assertEqual(tool_call["function"]["name"], "search_keywords")
+        self.assertTrue(agent._keywords_from_tool_call(tool_call))
+
+    def test_chip_question_finds_card_via_keywords(self):
+        agent = Agent()
+        self.addCleanup(agent.close)
+
+        result = agent.run("what is the pin-out for the 74HC00 chip")
+
+        titles = [source["title"] for source in result["sources"]]
+        self.assertIn("7400 quad nand chip [74LS00-74HC00]", titles)
+        self.assertEqual(result["sources"][0]["engine"], "study_cards")
 
     def test_no_card_match_is_reported_as_done(self):
         agent = Agent()
@@ -95,6 +117,35 @@ class AgentTests(unittest.TestCase):
         self.assertTrue(outcome.get("stopped"))
         self.assertEqual(agent.get_health(), "inactive")
         self.assertIsNone(agent._llm)
+
+
+class KeywordToolCallTests(unittest.TestCase):
+    def test_parses_and_cleans_keywords(self):
+        tool_call = {
+            "function": {
+                "arguments": '{"keywords": ["74HC00 pin-out", "c", "74HC00 pin-out", ""]}'
+            }
+        }
+
+        self.assertEqual(Agent._keywords_from_tool_call(tool_call), ["74HC00 pin-out"])
+
+    def test_bad_arguments_yield_no_keywords(self):
+        self.assertEqual(Agent._keywords_from_tool_call({"function": {"arguments": "nope"}}), [])
+        self.assertEqual(Agent._keywords_from_tool_call({"function": {}}), [])
+        self.assertEqual(
+            Agent._keywords_from_tool_call({"function": {"arguments": '{"keywords": "x"}'}}),
+            [],
+        )
+
+
+class StudyCardSearchTests(unittest.TestCase):
+    def test_natural_question_finds_chip_card(self):
+        hits = tools.search_study_cards("what is the pin-out for the 74HC00 chip")
+
+        self.assertIn(
+            "7400 quad nand chip [74LS00-74HC00]",
+            [hit.title for hit in hits],
+        )
 
 
 class AppTests(unittest.TestCase):

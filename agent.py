@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 import os
 import re
@@ -7,7 +8,7 @@ import threading
 import time
 
 from download_and_check_model import ensure_model
-from tools import SearchHit, search_study_cards, search_web
+from tools import SearchHit, search_study_cards_multi, search_web
 
 logger = logging.getLogger(__name__)
 
@@ -87,6 +88,32 @@ Rules:
 
 CHAT_SYSTEM = """You are study notes librarian, a concise technical assistant powered by MiniCPM5-2B running locally.
 Answer directly and briefly. Do not show chain-of-thought or <think> tags."""
+
+SEARCH_KEYWORDS_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "search_keywords",
+        "description": (
+            "Extract the most useful search keywords from the user's question so the "
+            "librarian can look up local study cards. Prefer specific names, part "
+            "numbers and technical terms."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "keywords": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "1-6 concise keywords or short phrases, most specific first.",
+                }
+            },
+            "required": ["keywords"],
+        },
+    },
+}
+
+KEYWORDS_SYSTEM = """You extract search keywords from the user's question for a local study-card lookup.
+Always call the search_keywords tool. Keep each keyword short and specific, and keep the user's exact names and part numbers."""
 
 
 def _step(kind: str, label: str, detail: str, status: str = "done") -> dict:
@@ -251,6 +278,7 @@ class Agent:
             n_batch=int(os.getenv("N_BATCH", "512")),
             n_threads=int(os.getenv("N_THREADS", _DEFAULT_THREADS)),
             n_gpu_layers=int(os.getenv("N_GPU_LAYERS", "0")),
+            chat_format="chatml-function-calling",
             verbose=False,
         )
 
@@ -289,20 +317,31 @@ class Agent:
             with self._llm_lock:
                 self._close_locked()
 
-    def _generate(self, messages: list[dict[str, str]], temperature: float, max_tokens: int) -> str:
+    def _with_model(self, call):
         with self._generate_lock:
             if self._stop_event.is_set():
-                return ""
+                return None
 
             llm = self._ensure_loaded()
 
             if self._stop_event.is_set():
                 with self._llm_lock:
                     self._close_locked()
-                return ""
+                return None
 
             self._set_state("loading response")
 
+            try:
+                return call(llm)
+            finally:
+                if self._stop_event.is_set():
+                    with self._llm_lock:
+                        self._close_locked()
+                else:
+                    self._set_state("ready")
+
+    def _generate(self, messages: list[dict[str, str]], temperature: float, max_tokens: int) -> str:
+        def call(llm) -> str:
             pieces: list[str] = []
             stream = None
 
@@ -324,21 +363,47 @@ class Agent:
                     piece = chunk["choices"][0].get("text") or ""
                     if piece:
                         pieces.append(piece)
-            except Exception as exc:
-                raise LLMError(f"{self.model_name} inference failed: {exc}") from exc
             finally:
                 if stream is not None:
                     close_stream = getattr(stream, "close", None)
                     if callable(close_stream):
                         close_stream()
 
-                if self._stop_event.is_set():
-                    with self._llm_lock:
-                        self._close_locked()
-                else:
-                    self._set_state("ready")
-
             return clean_model_text("".join(pieces))
+
+        try:
+            result = self._with_model(call)
+        except LLMError:
+            raise
+        except Exception as exc:
+            raise LLMError(f"{self.model_name} inference failed: {exc}") from exc
+
+        return result if result is not None else ""
+
+    def extract_keywords(self, message: str) -> dict | None:
+        def call(llm):
+            response = llm.create_chat_completion(
+                messages=[
+                    {"role": "system", "content": KEYWORDS_SYSTEM},
+                    {"role": "user", "content": message[:600]},
+                ],
+                tools=[SEARCH_KEYWORDS_TOOL],
+                tool_choice={"type": "function", "function": {"name": "search_keywords"}},
+                temperature=0.2,
+                top_p=0.95,
+                repeat_penalty=1.15,
+                min_p=0.0,
+                max_tokens=192,
+            )
+            tool_calls = response["choices"][0]["message"].get("tool_calls") or []
+            return tool_calls[0] if tool_calls else None
+
+        try:
+            return self._with_model(call)
+        except LLMError:
+            raise
+        except Exception as exc:
+            raise LLMError(f"{self.model_name} keyword extraction failed: {exc}") from exc
 
     def run(
         self,
@@ -397,7 +462,37 @@ class Agent:
             )
 
         if check_cards and base_query:
-            local_hits = search_study_cards(base_query, limit=max_sources)
+            keywords: list[str] = []
+            try:
+                tool_call = self.extract_keywords(message)
+            except LLMError:
+                tool_call = None
+
+            if tool_call is not None:
+                keywords = self._keywords_from_tool_call(tool_call)
+
+            tools.append(
+                {
+                    "name": "search_keywords",
+                    "label": "Keyword extraction",
+                    "detail": ", ".join(keywords) if keywords else "fallback to the raw question",
+                    "status": "done" if keywords else "skipped",
+                }
+            )
+            steps.append(
+                _step(
+                    "tool",
+                    "search_keywords",
+                    (
+                        f"Keywords: {', '.join(keywords)}"
+                        if keywords
+                        else "Used the raw question as the search query."
+                    ),
+                    "done" if keywords else "skipped",
+                )
+            )
+
+            local_hits = search_study_cards_multi(keywords or [base_query], limit=max_sources)
             if local_hits:
                 names = ", ".join(hit.title for hit in local_hits[:3])
                 steps.append(
@@ -629,6 +724,28 @@ class Agent:
             "stopped": self._stop_event.is_set(),
             "search_study_cards_first": search_study_cards_first,
         }
+
+    @staticmethod
+    def _keywords_from_tool_call(tool_call: dict) -> list[str]:
+        try:
+            arguments = json.loads(tool_call["function"]["arguments"])
+        except (KeyError, TypeError, ValueError):
+            return []
+
+        raw = arguments.get("keywords") if isinstance(arguments, dict) else None
+        if not isinstance(raw, list):
+            return []
+
+        seen: set[str] = set()
+        keywords: list[str] = []
+        for item in raw:
+            text = str(item).strip()
+            key = text.lower()
+            if len(text) < 2 or key in seen:
+                continue
+            seen.add(key)
+            keywords.append(text)
+        return keywords[:6]
 
     @staticmethod
     def _engine_detail(info: dict) -> str:
