@@ -46,7 +46,7 @@ class SearchHit:
     fetched: bool = False
     rank: int = field(default=0, repr=False)
 
-    def to_dict(self, index: int) -> dict:
+    def to_dict(self, index) -> dict:
         data = asdict(self)
         data.pop("rank", None)
         data["id"] = index
@@ -60,21 +60,21 @@ class SearchHit:
         return data
 
 
-def _clean_text(value: str) -> str:
+def _clean_text(value) -> str:
     value = html.unescape(value or "")
     return re.sub(r"\s+", " ", value).strip()
 
 
-def _normalize_url(url: str) -> str:
+def _normalize_url(url) -> str:
     parsed = urlparse((url or "").strip())
     return f"{parsed.scheme}://{parsed.netloc}{parsed.path}".rstrip("/")
 
 
-def _tokens(text: str) -> list[str]:
+def _tokens(text) -> list[str]:
     return TOKEN_RE.findall((text or "").lower())
 
 
-def _query_terms(query: str) -> list[str]:
+def _query_terms(query) -> list[str]:
     terms: list[str] = []
     seen: set[str] = set()
     for token in _tokens(query):
@@ -85,11 +85,11 @@ def _query_terms(query: str) -> list[str]:
     return terms
 
 
-def _is_strong(term: str) -> bool:
+def _is_strong(term) -> bool:
     return len(term) >= 3 and bool(STRONG_TOKEN_RE.search(term))
 
 
-def _iter_study_cards(root: Path):
+def _iter_study_cards(root):
     try:
         paths = root.rglob("*")
     except OSError:
@@ -108,7 +108,7 @@ def _iter_study_cards(root: Path):
         yield path, relative
 
 
-def _read_study_card(path: Path) -> str | None:
+def _read_study_card(path) -> str | None:
     try:
         if path.stat().st_size > STUDY_CARD_MAX_BYTES:
             return None
@@ -120,13 +120,13 @@ def _read_study_card(path: Path) -> str | None:
     return data.decode("utf-8", errors="ignore")
 
 
-def _study_card_code(content: str) -> str:
+def _study_card_code(content) -> str:
     blocks = re.findall(r"```[ \t]*[A-Za-z0-9_+#.-]*[ \t]*\r?\n(.*?)```", content, re.DOTALL)
     cleaned = [block.strip() for block in blocks if block.strip()]
     return "\n\n".join(cleaned[:3])[:MAX_PAGE_CHARS]
 
 
-def _phrase_in(needle: list[str], haystack: list[str]) -> bool:
+def _phrase_in(needle, haystack) -> bool:
     if not needle or len(needle) > len(haystack):
         return False
     for start in range(len(haystack) - len(needle) + 1):
@@ -135,9 +135,7 @@ def _phrase_in(needle: list[str], haystack: list[str]) -> bool:
     return False
 
 
-def _card_score(
-    path: Path, content: str, terms: list[str], query_tokens: list[str]
-) -> float | None:
+def _card_score(path, content, terms, query_tokens) -> float | None:
     if not terms:
         return None
 
@@ -183,7 +181,7 @@ def _card_score(
     )
 
 
-def _search_cards(query: str, limit: int) -> list[tuple[float, str, Path, str, Path]]:
+def _search_cards(query, limit) -> list[tuple[float, str, Path, str, Path]]:
     terms = _query_terms(query)
     query_tokens = _tokens(query)
     if not terms:
@@ -204,9 +202,7 @@ def _search_cards(query: str, limit: int) -> list[tuple[float, str, Path, str, P
     return scored[:limit]
 
 
-def _hits_from(
-    scored: list[tuple[float, str, Path, str, Path]], limit: int
-) -> list[SearchHit]:
+def _hits_from(scored, limit) -> list[SearchHit]:
     hits: list[SearchHit] = []
     for _, _, path, content, relative in scored[:limit]:
         hits.append(
@@ -223,13 +219,13 @@ def _hits_from(
     return hits
 
 
-def search_study_cards(query: str, limit: int = 5) -> list[SearchHit]:
+def search_study_cards(query, limit=5) -> list[SearchHit]:
     if not query.strip() or not STUDY_CARDS_DIR.exists():
         return []
     return _hits_from(_search_cards(query, limit), limit)
 
 
-def search_study_cards_multi(queries: list[str], limit: int = 5) -> list[SearchHit]:
+def search_study_cards_multi(queries, limit=5) -> list[SearchHit]:
     if not STUDY_CARDS_DIR.exists():
         return []
 
@@ -246,7 +242,7 @@ def search_study_cards_multi(queries: list[str], limit: int = 5) -> list[SearchH
     return _hits_from(ranked, limit)
 
 
-def _duckduckgo_html(query: str, limit: int) -> list[SearchHit]:
+def _duckduckgo_html(query, limit) -> list[SearchHit]:
     response = requests.post(
         "https://html.duckduckgo.com/html/",
         data={"q": query},
@@ -279,7 +275,7 @@ def _duckduckgo_html(query: str, limit: int) -> list[SearchHit]:
     return hits
 
 
-def duckduckgo_search(query: str, limit: int = 5) -> tuple[list[SearchHit], str | None]:
+def duckduckgo_search(query, limit=5) -> tuple[list[SearchHit], str | None]:
     try:
         from ddgs import DDGS
     except ImportError:
@@ -326,7 +322,7 @@ def duckduckgo_search(query: str, limit: int = 5) -> tuple[list[SearchHit], str 
     return [], f"DuckDuckGo: {detail}"
 
 
-def brave_search(query: str, limit: int = 5) -> tuple[list[SearchHit], str | None]:
+def brave_search(query, limit=5) -> tuple[list[SearchHit], str | None]:
     key = os.getenv("BRAVE_API_KEY", "").strip()
     if not key:
         return [], "BRAVE_API_KEY is not configured"
@@ -368,7 +364,7 @@ def brave_search(query: str, limit: int = 5) -> tuple[list[SearchHit], str | Non
     return hits, None
 
 
-def fetch_page(hit: SearchHit) -> SearchHit:
+def fetch_page(hit) -> SearchHit:
     try:
         response = requests.get(
             hit.url,
@@ -419,7 +415,7 @@ def fetch_page(hit: SearchHit) -> SearchHit:
     return hit
 
 
-def _interleave(groups: dict[str, list[SearchHit]], limit: int) -> list[SearchHit]:
+def _interleave(groups, limit) -> list[SearchHit]:
     merged: list[SearchHit] = []
     seen: set[str] = set()
     engines = [engine for engine, hits in groups.items() if hits]
@@ -446,12 +442,7 @@ def _interleave(groups: dict[str, list[SearchHit]], limit: int) -> list[SearchHi
     return merged
 
 
-def search_web(
-    queries: list[str],
-    limit: int = 5,
-    max_sources: int = 6,
-    fetch_top: int = 3,
-) -> tuple[list[SearchHit], dict]:
+def search_web(queries, limit=5, max_sources=6, fetch_top=3) -> tuple[list[SearchHit], dict]:
     queries = [query.strip() for query in queries if query.strip()][:3]
     engine_info = {
         "duckduckgo": {"status": "skipped", "queries": queries, "count": 0, "error": None},

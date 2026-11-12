@@ -197,7 +197,7 @@ def _config_fields() -> dict:
     return fields
 
 
-def _normalize_setting(field: dict, raw) -> tuple[str | None, str]:
+def _normalize_setting(field, raw) -> tuple[str | None, str]:
     value = str(raw).strip()
     kind = field["type"]
     if kind == "bool":
@@ -238,11 +238,11 @@ def index():
 
 
 @app.get("/study_cards/<path:filename>")
-def study_card(filename: str):
+def study_card(filename):
     return send_from_directory(str(tools.STUDY_CARDS_DIR), filename)
 
 
-def _card_slug(content: str) -> str:
+def _card_slug(content) -> str:
     for line in content.splitlines():
         stripped = line.lstrip()
         if not stripped.startswith("#"):
@@ -269,7 +269,7 @@ def _card_folders() -> list[str]:
         return []
 
 
-def _valid_card_name(name: str) -> bool:
+def _valid_card_name(name) -> bool:
     if not name or len(name) > 200 or name.startswith(".") or not name.lower().endswith(".md"):
         return False
     if "/" in name or "\\" in name or "\x00" in name:

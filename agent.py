@@ -48,7 +48,7 @@ OPEN_THINK_RE = re.compile(r"<think>.*", re.S)
 SPECIAL_RE = re.compile(r"<\|im_(?:start|end)\|>")
 
 
-def clean_model_text(text: str) -> str:
+def clean_model_text(text) -> str:
     text = SPECIAL_RE.sub("", text or "")
     text = THINK_RE.sub("", text)
     text = OPEN_THINK_RE.sub("", text)
@@ -56,7 +56,7 @@ def clean_model_text(text: str) -> str:
     return text
 
 
-def _format_prompt(messages: list[dict[str, str]]) -> str:
+def _format_prompt(messages) -> str:
     blocks: list[str] = []
     for message in messages:
         role = str(message.get("role", "user"))
@@ -71,6 +71,7 @@ def _format_prompt(messages: list[dict[str, str]]) -> str:
             blocks.append(f"<|im_start|>user\n{content}<|im_end|>\n")
     blocks.append("<|im_start|>assistant\n<think>\n\n</think>\n\n")
     return "".join(blocks)
+
 
 ANSWER_SYSTEM = """You are study notes librarian, a concise technical assistant powered by MiniCPM5-2B running locally on the user's machine.
 
@@ -116,11 +117,11 @@ KEYWORDS_SYSTEM = """You extract search keywords from the user's question for a 
 Always call the search_keywords tool. Keep each keyword short and specific, and keep the user's exact names and part numbers."""
 
 
-def _step(kind: str, label: str, detail: str, status: str = "done") -> dict:
+def _step(kind, label, detail, status="done") -> dict:
     return {"kind": kind, "label": label, "detail": detail, "status": status}
 
 
-def _should_search(message: str) -> bool:
+def _should_search(message) -> bool:
     text = message.strip()
     if not text:
         return False
@@ -133,7 +134,7 @@ def _should_search(message: str) -> bool:
     return len(text.split()) >= 3 or "?" in text
 
 
-def _should_check_cards(message: str) -> bool:
+def _should_check_cards(message) -> bool:
     text = message.strip()
     if not text:
         return False
@@ -144,7 +145,7 @@ def _should_check_cards(message: str) -> bool:
     return True
 
 
-def _build_queries(message: str) -> list[str]:
+def _build_queries(message) -> list[str]:
     text = re.sub(r"```.*?```", " ", message, flags=re.S)
     text = re.sub(r"`([^`]+)`", r"\1", text)
     text = re.sub(r"\s+", " ", text).strip()
@@ -164,7 +165,7 @@ def _build_queries(message: str) -> list[str]:
     return unique[:2]
 
 
-def _context_block(sources: list[SearchHit]) -> str:
+def _context_block(sources) -> str:
     chunks: list[str] = []
     for index, hit in enumerate(sources, start=1):
         excerpt = hit.content or hit.snippet
@@ -179,7 +180,7 @@ def _context_block(sources: list[SearchHit]) -> str:
     return "\n\n".join(chunks)
 
 
-def _summary(answer: str, sources: list[SearchHit], fallback: bool) -> str:
+def _summary(answer, sources, fallback) -> str:
     local_only = bool(sources) and all(hit.engine == "study_cards" for hit in sources)
     if fallback:
         if sources:
@@ -210,7 +211,7 @@ def _summary(answer: str, sources: list[SearchHit], fallback: bool) -> str:
     return summary
 
 
-def _fallback_answer(sources: list[SearchHit], error: str) -> str:
+def _fallback_answer(sources, error) -> str:
     if not sources:
         return (
             "I could not reach the local MiniCPM5-2B model.\n\n"
@@ -258,11 +259,11 @@ class Agent:
         with self._state_lock:
             return self._loading
 
-    def _set_state(self, state: str) -> None:
+    def _set_state(self, state) -> None:
         with self._state_lock:
             self._state = state
 
-    def _set_loading(self, loading: bool) -> None:
+    def _set_loading(self, loading) -> None:
         with self._state_lock:
             self._loading = loading
 
@@ -300,9 +301,8 @@ class Agent:
 
     def _close_locked(self) -> None:
         llm = self._llm
-        self._llm = None
-
         if llm is not None:
+            self._llm = None
             try:
                 llm.close()
             except Exception:
@@ -340,7 +340,7 @@ class Agent:
                 else:
                     self._set_state("ready")
 
-    def _generate(self, messages: list[dict[str, str]], temperature: float, max_tokens: int) -> str:
+    def _generate(self, messages, temperature, max_tokens) -> str:
         def call(llm) -> str:
             pieces: list[str] = []
             stream = None
@@ -380,7 +380,7 @@ class Agent:
 
         return result if result is not None else ""
 
-    def extract_keywords(self, message: str) -> dict | None:
+    def extract_keywords(self, message) -> dict | None:
         def call(llm):
             response = llm.create_chat_completion(
                 messages=[
@@ -405,12 +405,7 @@ class Agent:
         except Exception as exc:
             raise LLMError(f"{self.model_name} keyword extraction failed: {exc}") from exc
 
-    def run(
-        self,
-        message: str,
-        history: list[dict] | None = None,
-        search_study_cards_first: bool = True,
-    ) -> dict:
+    def run(self, message, history=None, search_study_cards_first=True) -> dict:
         started = time.monotonic()
         self._stop_event.clear()
         max_sources = int(os.getenv("MAX_SOURCES", "3"))
@@ -726,7 +721,7 @@ class Agent:
         }
 
     @staticmethod
-    def _keywords_from_tool_call(tool_call: dict) -> list[str]:
+    def _keywords_from_tool_call(tool_call) -> list[str]:
         try:
             arguments = json.loads(tool_call["function"]["arguments"])
         except (KeyError, TypeError, ValueError):
@@ -748,7 +743,7 @@ class Agent:
         return keywords[:6]
 
     @staticmethod
-    def _engine_detail(info: dict) -> str:
+    def _engine_detail(info) -> str:
         if info["status"] == "skipped":
             if info.get("error") == "BRAVE_API_KEY is not configured":
                 return "Skipped — no BRAVE_API_KEY configured."
@@ -759,7 +754,7 @@ class Agent:
         return f"{info['count']} results · query: \"{first_query}\""
 
     @staticmethod
-    def _clean_history(history: list[dict] | None) -> list[dict[str, str]]:
+    def _clean_history(history) -> list[dict[str, str]]:
         cleaned: list[dict[str, str]] = []
         for item in (history or [])[-8:]:
             if not isinstance(item, dict):

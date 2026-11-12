@@ -5,13 +5,10 @@ import os
 import sys
 import time
 from pathlib import Path
-from typing import Callable
 
 import requests
 
 BASE_DIR = Path(__file__).resolve().parent
-
-Progress = Callable[[int, int], None]
 
 MIN_MODEL_BYTES = 100 * 1024 * 1024
 
@@ -39,7 +36,7 @@ def model_url() -> str:
     return f"https://huggingface.co/{model_repo()}/resolve/main/{model_file()}"
 
 
-def _has_gguf_magic(path: Path) -> bool:
+def _has_gguf_magic(path) -> bool:
     try:
         with path.open("rb") as handle:
             return handle.read(4) == b"GGUF"
@@ -61,7 +58,7 @@ def model_ready() -> bool:
     return _has_gguf_magic(path)
 
 
-def ensure_model(progress: Progress | None = None) -> Path:
+def ensure_model(progress=None) -> Path:
     path = model_path()
 
     if model_ready():
@@ -109,7 +106,7 @@ def ensure_model(progress: Progress | None = None) -> Path:
     return path
 
 
-def _cli_progress(done: int, total: int) -> None:
+def _cli_progress(done, total) -> None:
     if total:
         percent = done * 100 / total
         sys.stdout.write(f"\r{percent:5.1f}%  {done / 1e9:.2f}/{total / 1e9:.2f} GB")
