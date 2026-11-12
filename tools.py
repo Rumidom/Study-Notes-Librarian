@@ -98,7 +98,7 @@ def _iter_study_cards(root: Path):
             continue
         if any(part.startswith(".") for part in relative.parts):
             continue
-        if path.suffix.lower() not ".md":
+        if path.suffix.lower() != ".md":
             continue
         yield path, relative
 

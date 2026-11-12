@@ -5,6 +5,7 @@ const state = {
   lastResult: null,
   searchStudyCardsFirst: true,
   cardName: null,
+  controller: null,
 };
 
 const elemts = {
@@ -526,10 +527,12 @@ async function sendMessage(value) {
   setTraceLoading();
   elemts.requestMeta.textContent = "Researching…";
 
+  state.controller = new AbortController();
   try {
     const response = await fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      signal: state.controller.signal,
       body: JSON.stringify({
         message: text,
         history: state.conversation.slice(0, -1).slice(-8),
@@ -542,11 +545,16 @@ async function sendMessage(value) {
     }
 
     loading.remove();
+    if (result.stopped) {
+      elemts.requestMeta.textContent = "Stopped";
+      return;
+    }
+
     const seconds = result.elapsed_ms ? (result.elapsed_ms / 1000).toFixed(1) : "0.0";
     const meta = [
       `${result.sources?.length || 0} sources`,
       `${seconds}s`,
-      result.llm_failed ? "fallback" : result.model_name || "MiniCPM5-2B",
+      result.llm_failed ? "fallback" : result.model || "MiniCPM5-2B",
     ];
     addMessage("assistant", result.answer, { sources: result.sources || [], meta });
     state.conversation.push({ role: "assistant", content: result.answer });
@@ -555,6 +563,10 @@ async function sendMessage(value) {
     elemts.requestMeta.textContent = `${seconds}s · ${result.sources?.length || 0} sources`;
   } catch (error) {
     loading.remove();
+    if (error?.name === "AbortError") {
+      elemts.requestMeta.textContent = "Stopped";
+      return;
+    }
     const message = error instanceof Error ? error.message : String(error);
     addMessage("assistant", `I hit an error: ${message}`, { meta: ["error"] });
     elemts.traceTime.textContent = "—";
@@ -565,6 +577,7 @@ async function sendMessage(value) {
       </div>`;
     elemts.requestMeta.textContent = "Request failed";
   } finally {
+    state.controller = null;
     setBusy(false);
     elemts.prompt.focus();
   }
@@ -586,21 +599,22 @@ function clearChat() {
 }
 
 function updateStatus(health) {
-  const status = health.status || (health.online ? "ready" : "error");
-  elemts.modelStatus.dataset.state = status;
+  const status = health.status || "inactive";
+  const model = health.model || "MiniCPM5-2B";
+  elemts.modelStatus.dataset.state = health.loading ? "loading" : status;
   elemts.modelStatus.title = health.message || "";
 
-  if (status === "downloading" && health.progress > 0) {
-    elemts.statusText.textContent = `Downloading MiniCPM5-2B · ${health.progress}%`;
-  } else if (status === "loading" || status === "downloading" || status === "checking") {
-    elemts.statusText.textContent = health.message || "Loading MiniCPM5-2B…";
+  if (health.loading) {
+    elemts.statusText.textContent = `Loading ${model}…`;
+  } else if (status === "loading response") {
+    elemts.statusText.textContent = `${model} · composing…`;
   } else if (status === "ready") {
-    elemts.statusText.textContent = `${health.model || "MiniCPM5-2B"} · ready`;
+    elemts.statusText.textContent = `${model} · ready`;
     if (!state.lastResult) {
       elemts.requestMeta.textContent = health.backend || "Local inference";
     }
   } else {
-    elemts.statusText.textContent = "Model offline";
+    elemts.statusText.textContent = `${model} · inactive`;
   }
 }
 
@@ -610,15 +624,15 @@ async function checkHealth() {
     const response = await fetch("/api/health", { cache: "no-store" });
     const health = await response.json();
     updateStatus(health);
-    if (["downloading", "loading", "checking", "idle"].includes(health.status)) {
+    if (health.loading || health.status === "loading response") {
       state.healthTimer = setTimeout(checkHealth, 1500);
     } else if (health.status === "ready") {
       state.healthTimer = setTimeout(checkHealth, 30000);
     } else {
-      state.healthTimer = setTimeout(checkHealth, 8000);
+      state.healthTimer = setTimeout(checkHealth, 10000);
     }
   } catch (error) {
-    updateStatus({ status: "error", message: "Backend unreachable" });
+    updateStatus({ status: "inactive", message: "Backend unreachable" });
     state.healthTimer = setTimeout(checkHealth, 5000);
   }
 }
@@ -676,6 +690,27 @@ elemts.traceScroll.addEventListener("change", (event) => {
 });
 
 elemts.clearBtn.addEventListener("click", clearChat);
+
+function stopGeneration() {
+  if (state.controller) {
+    state.controller.abort();
+  }
+  fetch("/api/stop", { method: "POST", keepalive: true }).catch(() => {});
+  setBusy(false);
+  elemts.requestMeta.textContent = "Stopped";
+}
+
+elemts.stopBtn.addEventListener("click", stopGeneration);
+
+function closeModelOnExit() {
+  if (navigator.sendBeacon) {
+    navigator.sendBeacon("/api/stop");
+  } else {
+    fetch("/api/stop", { method: "POST", keepalive: true }).catch(() => {});
+  }
+}
+
+window.addEventListener("pagehide", closeModelOnExit);
 
 function setActiveTab(tab) {
   const showConversation = tab === "conversation";

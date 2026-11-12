@@ -25,9 +25,9 @@
       </div>
       <div class="topbar-right">
         <span class="topbar-note" id="topbarNote" role="status" hidden></span>
-        <div class="status-pill" id="modelStatus" data-state="checking">
+        <div class="status-pill" id="modelStatus" data-state="inactive">
           <span class="status-dot" aria-hidden="true"></span>
-          <span id="statusText">Checking model…</span>
+          <span id="statusText">{{ model }} · inactive</span>
         </div>
         <button class="ghost-btn" id="settingsBtn" type="button">Settings</button>
       </div>
@@ -117,6 +117,7 @@
           <div>
             <span class="eyebrow" id="traceTitle">Agent Trace</span>
           </div>
+          <span class="trace-time" id="traceTime">—</span>
         </div>
 
         <div class="trace-scroll" id="traceScroll">

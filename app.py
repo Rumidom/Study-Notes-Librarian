@@ -5,7 +5,6 @@ import re
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import quote
-from llama_cpp import Llama
 
 try:
     from dotenv import load_dotenv, set_key
@@ -22,14 +21,7 @@ from agent import Agent
 BASE_DIR = Path(__file__).resolve().parent
 ENV_PATH = BASE_DIR / ".env"
 
-llama_cpp.llama_backend_init()
-
-llm_client = Llama(
-      model_path="models/MiniCPM5-2B-Q4_K_M.gguf",
-      chat_format="llama-2"
-)
-
-agent = Agent(llm_client)
+agent = Agent()
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 1024 * 1024
@@ -159,15 +151,6 @@ CONFIG_GROUPS = [
                 "max": 4096,
                 "hint": "Prompt batch size used by llama.cpp.",
             },
-            {
-                "key": "MODEL_LOAD_TIMEOUT",
-                "label": "Load timeout (seconds)",
-                "type": "int",
-                "default": "300",
-                "min": 30,
-                "max": 3600,
-                "hint": "How long a request waits for the model to finish loading.",
-            },
         ],
     },
     {
@@ -243,14 +226,13 @@ def _apply_live_config() -> None:
     cards_dir = Path(os.environ.get("STUDY_CARDS_DIR", "study_cards"))
     tools.STUDY_CARDS_DIR = cards_dir if cards_dir.is_absolute() else BASE_DIR / cards_dir
     tools.HTTP_TIMEOUT = float(os.environ.get("HTTP_TIMEOUT", "10"))
-    llm_client.max_tokens = int(os.environ.get("MAX_TOKENS", "350"))
 
 
 @app.get("/")
 def index():
     return render_template(
         "index.html",
-        model = "MiniCPM5-2B", # this should get name from agent
+        model=agent.model_name,
         card_folders=_card_folders(),
     )
 
@@ -339,7 +321,8 @@ def save_study_card():
     if folder is not None and not isinstance(folder, str):
         return jsonify({"error": "Folder must be a string."}), 400
 
-    if (not ("md" in name.split("."))): name = name +".md"
+    if name is not None and "md" not in name.split("."):
+        name = name + ".md"
 
     root = tools.STUDY_CARDS_DIR
     folder = (folder or "").strip()
@@ -400,10 +383,23 @@ def get_config():
         }
     )
 
-@app.post("/api/health")
-def get_health():
-    agent.ensure_started()
-    return jsonify(agent.health())
+@app.get("/api/health")
+def health():
+    return jsonify(
+        {
+            "status": agent.get_health(),
+            "loading": agent.is_loading(),
+            "model": agent.model_name,
+            "backend": "llama.cpp · local",
+        }
+    )
+
+
+@app.post("/api/stop")
+def stop():
+    agent.close()
+    return jsonify({"ok": True, "status": agent.get_health()})
+
 
 @app.post("/api/config")
 def save_config():

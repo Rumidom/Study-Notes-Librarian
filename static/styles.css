@@ -203,9 +203,13 @@ button {
   box-shadow: 0 0 0 4px rgba(224, 127, 111, 0.1);
 }
 
+.status-pill[data-state="inactive"] .status-dot {
+  background: var(--muted);
+  box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.04);
+}
+
 .status-pill[data-state="loading"] .status-dot,
-.status-pill[data-state="downloading"] .status-dot,
-.status-pill[data-state="checking"] .status-dot {
+.status-pill[data-state="loading response"] .status-dot {
   animation: pulse-dot 1.2s ease-in-out infinite;
 }
 

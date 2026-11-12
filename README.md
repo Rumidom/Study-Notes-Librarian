@@ -27,5 +27,12 @@ On the upper right corner click on settings, add your Brave Search API key then 
 #### Configuration File
 if you need to edit the configuration file manually,  open the file ```.env``` on a text editor.
 
+## Tests
+The tests exercise the app end-to-end against the real model, run them from the project root:
+
+```
+.venv/bin/python -m unittest discover -s tests
+```
+
 ## License
 Study-Notes-Librarian was made using GLM 4.6(Big Pickle) and is MIT licensed

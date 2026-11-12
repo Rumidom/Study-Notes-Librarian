@@ -1,8 +1,21 @@
 from __future__ import annotations
+
+import logging
 import os
 import re
+import threading
 import time
+
+from download_and_check_model import ensure_model
 from tools import SearchHit, search_study_cards, search_web
+
+logger = logging.getLogger(__name__)
+
+_DEFAULT_THREADS = str(max(1, min(8, (os.cpu_count() or 4) // 2)))
+
+
+class LLMError(RuntimeError):
+    pass
 
 SMALLTALK_RE = re.compile(
     r"^(hi|hello|hey|yo|good (morning|afternoon|evening)|thanks|thank you|"
@@ -33,12 +46,30 @@ THINK_RE = re.compile(r"<think>.*?</think>", re.S)
 OPEN_THINK_RE = re.compile(r"<think>.*", re.S)
 SPECIAL_RE = re.compile(r"<\|im_(?:start|end)\|>")
 
+
 def clean_model_text(text: str) -> str:
     text = SPECIAL_RE.sub("", text or "")
     text = THINK_RE.sub("", text)
     text = OPEN_THINK_RE.sub("", text)
     text = text.replace("<|im_end|>", "").strip()
     return text
+
+
+def _format_prompt(messages: list[dict[str, str]]) -> str:
+    blocks: list[str] = []
+    for message in messages:
+        role = str(message.get("role", "user"))
+        content = str(message.get("content", ""))
+        if role == "assistant":
+            blocks.append(
+                f"<|im_start|>assistant\n<think>\n\n</think>\n\n{content}<|im_end|>\n"
+            )
+        elif role == "system":
+            blocks.append(f"<|im_start|>system\n{content}<|im_end|>\n")
+        else:
+            blocks.append(f"<|im_start|>user\n{content}<|im_end|>\n")
+    blocks.append("<|im_start|>assistant\n<think>\n\n</think>\n\n")
+    return "".join(blocks)
 
 ANSWER_SYSTEM = """You are study notes librarian, a concise technical assistant powered by MiniCPM5-2B running locally on the user's machine.
 
@@ -180,8 +211,134 @@ def _fallback_answer(sources: list[SearchHit], error: str) -> str:
 
 
 class Agent:
-    def __init__(self, llm) -> None:
-        self.llm = llm
+    def __init__(self) -> None:
+        self.model_name = os.getenv("LLM_MODEL", "MiniCPM5-2B")
+
+        self._llm = None
+        self._state = "inactive"
+        self._loading = False
+
+        self._state_lock = threading.Lock()
+        self._llm_lock = threading.Lock()
+        self._generate_lock = threading.Lock()
+        self._stop_event = threading.Event()
+
+    def get_health(self) -> str:
+        with self._state_lock:
+            return self._state
+
+    def is_loading(self) -> bool:
+        with self._state_lock:
+            return self._loading
+
+    def _set_state(self, state: str) -> None:
+        with self._state_lock:
+            self._state = state
+
+    def _set_loading(self, loading: bool) -> None:
+        with self._state_lock:
+            self._loading = loading
+
+    def _load_model(self):
+        from llama_cpp import Llama
+
+        model_path = ensure_model()
+        logger.info("Loading %s from %s", self.model_name, model_path)
+
+        return Llama(
+            model_path=str(model_path),
+            n_ctx=int(os.getenv("N_CTX", "6144")),
+            n_batch=int(os.getenv("N_BATCH", "512")),
+            n_threads=int(os.getenv("N_THREADS", _DEFAULT_THREADS)),
+            n_gpu_layers=int(os.getenv("N_GPU_LAYERS", "0")),
+            verbose=False,
+        )
+
+    def _ensure_loaded(self):
+        with self._llm_lock:
+            if self._llm is None:
+                self._set_loading(True)
+                try:
+                    self._llm = self._load_model()
+                except LLMError:
+                    raise
+                except Exception as exc:
+                    raise LLMError(f"Could not load {self.model_name}: {exc}") from exc
+                finally:
+                    self._set_loading(False)
+
+            self._set_state("ready")
+            return self._llm
+
+    def _close_locked(self) -> None:
+        llm = self._llm
+        self._llm = None
+
+        if llm is not None:
+            try:
+                llm.close()
+            except Exception:
+                logger.exception("Failed to close %s cleanly", self.model_name)
+
+        self._set_state("inactive")
+
+    def close(self) -> None:
+        self._stop_event.set()
+
+        with self._generate_lock:
+            with self._llm_lock:
+                self._close_locked()
+
+    def _generate(self, messages: list[dict[str, str]], temperature: float, max_tokens: int) -> str:
+        with self._generate_lock:
+            if self._stop_event.is_set():
+                return ""
+
+            llm = self._ensure_loaded()
+
+            if self._stop_event.is_set():
+                with self._llm_lock:
+                    self._close_locked()
+                return ""
+
+            self._set_state("loading response")
+
+            pieces: list[str] = []
+            stream = None
+
+            try:
+                stream = llm.create_completion(
+                    prompt=_format_prompt(messages),
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    top_p=0.9,
+                    repeat_penalty=1.05,
+                    stop=["<|im_end|>", "<|im_start|>"],
+                    stream=True,
+                )
+
+                for chunk in stream:
+                    if self._stop_event.is_set():
+                        break
+
+                    piece = chunk["choices"][0].get("text") or ""
+                    if piece:
+                        pieces.append(piece)
+            except Exception as exc:
+                raise LLMError(f"{self.model_name} inference failed: {exc}") from exc
+            finally:
+                if stream is not None:
+                    close_stream = getattr(stream, "close", None)
+                    if callable(close_stream):
+                        close_stream()
+
+                if self._stop_event.is_set():
+                    with self._llm_lock:
+                        self._close_locked()
+                else:
+                    self._set_state("ready")
+
+            return clean_model_text("".join(pieces))
 
     def run(
         self,
@@ -190,6 +347,7 @@ class Agent:
         search_study_cards_first: bool = True,
     ) -> dict:
         started = time.monotonic()
+        self._stop_event.clear()
         max_sources = int(os.getenv("MAX_SOURCES", "3"))
         clean_history = self._clean_history(history)
         steps: list[dict] = [
@@ -245,7 +403,7 @@ class Agent:
                 steps.append(
                     _step(
                         "tool",
-                        "Checked study cards",
+                        "study cards check",
                         f"Matched {len(local_hits)} file(s): {names}",
                     )
                 )
@@ -261,9 +419,9 @@ class Agent:
                 steps.append(
                     _step(
                         "tool",
-                        "Checked study cards",
+                        "study cards check",
                         f'No cards matched "{base_query[:80]}".',
-                        "skipped",
+                        "done",
                     )
                 )
                 tools.append(
@@ -271,7 +429,7 @@ class Agent:
                         "name": "study_cards",
                         "label": "Study cards",
                         "detail": "no matches",
-                        "status": "skipped",
+                        "status": "done",
                     }
                 )
 
@@ -408,15 +566,32 @@ class Agent:
             summary = f"Presented the exact study card: {card.title}."
         else:
             temperature = 0.25 if CODE_RE.search(message) else 0.4
+            max_tokens = int(os.getenv("MAX_TOKENS", "350"))
+
             try:
-                answer = self.llm.create_chat_completion(messages, temperature=temperature, max_tokens=350)
-                steps.append(
-                    _step(
-                        "answer",
-                        "Composed answer",
-                        f"MiniCPM5-2B · {len(sources)} sources · {len(answer.split())} words",
+                answer = self._generate(messages, temperature=temperature, max_tokens=max_tokens)
+
+                if answer:
+                    steps.append(
+                        _step(
+                            "answer",
+                            "answer Composing",
+                            f"{self.model_name} · {len(sources)} sources · "
+                            f"{len(answer.split())} words",
+                        )
                     )
-                )
+                elif self._stop_event.is_set():
+                    steps.append(
+                        _step(
+                            "answer",
+                            "Stopped",
+                            "Generation was stopped before an answer was produced.",
+                            "skipped",
+                        )
+                    )
+                else:
+                    raise LLMError(f"{self.model_name} returned an empty response.")
+
             except LLMError as exc:
                 llm_failed = True
                 error_text = str(exc)
@@ -433,28 +608,27 @@ class Agent:
             tools.append(
                 {
                     "name": "minicpm5-2b",
-                    "label": "MiniCPM5-2B",
-                    "detail": "fallback answer" if llm_failed else "answer assembly",
+                    "label": self.model_name,
+                    "detail": "fallback answer" if llm_failed else "answer composing",
                     "status": "failed" if llm_failed else "done",
                 }
             )
 
         source_dicts = [hit.to_dict(index) for index, hit in enumerate(sources, start=1)]
+
         return {
             "answer": answer,
             "summary": summary or _summary(answer, sources, llm_failed),
             "sources": source_dicts,
             "tools": tools,
             "steps": steps,
-            "model": getattr(self.llm, "model", "MiniCPM5-2B"),
+            "model": self.model_name,
             "backend": "llama.cpp",
             "elapsed_ms": int((time.monotonic() - started) * 1000),
             "llm_failed": llm_failed,
+            "stopped": self._stop_event.is_set(),
             "search_study_cards_first": search_study_cards_first,
         }
-
-    def get_health():
-        pass
 
     @staticmethod
     def _engine_detail(info: dict) -> str:
