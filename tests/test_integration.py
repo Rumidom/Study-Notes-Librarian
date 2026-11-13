@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import threading
 import time
@@ -39,7 +40,8 @@ class AgentTests(unittest.TestCase):
     def test_generates_answer_and_transitions_health(self):
         agent = Agent()
         self.addCleanup(agent.close)
-        self.assertEqual(agent.get_health(), "inactive")
+        expected = "ready" if agent.server_available() else "inactive"
+        self.assertEqual(agent.get_health(), expected)
 
         result = agent.run("hello there friend")
 
@@ -214,6 +216,73 @@ class SourceSummaryTests(unittest.TestCase):
         self.assertIn("Excerpt: ", block)
         self.assertNotIn("C" * 1401, block)
         self.assertIn("C" * 1400, block)
+
+
+class CardRelevanceTests(unittest.TestCase):
+    def test_tool_call_booleans(self):
+        cases = [
+            (True, True),
+            (False, False),
+            ("true", True),
+            ("false", False),
+            ("yes", True),
+            ("no", False),
+            ("maybe", None),
+        ]
+        for value, expected in cases:
+            tool_call = {"function": {"arguments": json.dumps({"relevant": value})}}
+            self.assertIs(
+                Agent._relevance_from_tool_call(tool_call),
+                expected,
+                f"relevant={value!r}",
+            )
+
+    def test_accepts_alternate_argument_names(self):
+        tool_call = {"function": {"arguments": '{"answers_question": false}'}}
+        self.assertIs(Agent._relevance_from_tool_call(tool_call), False)
+
+    def test_plain_text_fallback(self):
+        self.assertIs(Agent._relevance_from_text('{"relevant": false}'), False)
+        self.assertIs(Agent._relevance_from_text("relevant: no"), False)
+        self.assertIs(Agent._relevance_from_text("This is irrelevant to the question."), None)
+
+    def test_false_removes_card_from_matches(self):
+        agent = Agent()
+        cards = [
+            tools.SearchHit(title="A", url="/a", snippet="", engine="study_cards"),
+            tools.SearchHit(title="B", url="/b", snippet="", engine="study_cards"),
+        ]
+        agent.check_card_relevance = lambda message, hit: hit.title != "A"
+
+        kept, rejected = agent._filter_relevant_cards("q", cards)
+
+        self.assertEqual([hit.title for hit in kept], ["B"])
+        self.assertEqual([hit.title for hit in rejected], ["A"])
+
+    def test_all_rejected_empties_matches(self):
+        agent = Agent()
+        cards = [
+            tools.SearchHit(title="A", url="/a", snippet="", engine="study_cards"),
+            tools.SearchHit(title="B", url="/b", snippet="", engine="study_cards"),
+        ]
+        agent.check_card_relevance = lambda message, hit: False
+
+        kept, rejected = agent._filter_relevant_cards("q", cards)
+
+        self.assertEqual(kept, [])
+        self.assertEqual(len(rejected), 2)
+
+    def test_unknown_relevance_keeps_card(self):
+        agent = Agent()
+        cards = [
+            tools.SearchHit(title="A", url="/a", snippet="", engine="study_cards"),
+        ]
+        agent.check_card_relevance = lambda message, hit: None
+
+        kept, rejected = agent._filter_relevant_cards("q", cards)
+
+        self.assertEqual([hit.title for hit in kept], ["A"])
+        self.assertEqual(rejected, [])
 
 
 class StudyCardSearchTests(unittest.TestCase):
