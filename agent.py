@@ -1,18 +1,14 @@
 from __future__ import annotations
 
 import json
-import logging
 import os
 import re
 import threading
 import time
 
-from download_and_check_model import ensure_model
+import requests
+
 from tools import SearchHit, search_study_cards_multi, search_web
-
-logger = logging.getLogger(__name__)
-
-_DEFAULT_THREADS = str(max(1, min(8, (os.cpu_count() or 4) // 2)))
 
 
 class LLMError(RuntimeError):
@@ -46,6 +42,75 @@ NO_SEARCH_RE = re.compile(
 THINK_RE = re.compile(r"<think>.*?</think>", re.S)
 OPEN_THINK_RE = re.compile(r"<think>.*", re.S)
 SPECIAL_RE = re.compile(r"<\|im_(?:start|end)\|>")
+TOOL_MARKUP_RE = re.compile(
+    r"</?(?:param(?:eter)?s?|arg(?:ument)?s?|function|tool_calls?|tool|result)\b[^<>]*>"
+    r"|<\|[^|<>]*\|>",
+    re.IGNORECASE,
+)
+PROSE_STARTER_RE = re.compile(
+    r"^(?:i|we|you|let|please|sorry|sure|it|this|that|the user)\b",
+    re.IGNORECASE,
+)
+
+
+def _server_url() -> str:
+    host = (os.getenv("LLAMA_SERVER_HOST") or "127.0.0.1").strip()
+    port = (os.getenv("LLAMA_SERVER_PORT") or "5001").strip()
+    if "://" in host:
+        return host.rstrip("/")
+    return f"http://{host}:{port}"
+
+
+def _response_error(response) -> str:
+    try:
+        data = response.json()
+    except ValueError:
+        return response.text[:240]
+    if isinstance(data, dict):
+        error = data.get("error")
+        if isinstance(error, dict):
+            return str(error.get("message") or error)[:240]
+        if error:
+            return str(error)[:240]
+    return str(data)[:240]
+
+
+def _parse_stream_line(raw_line) -> tuple[bool, str]:
+    if not raw_line:
+        return False, ""
+
+    if isinstance(raw_line, bytes):
+        line = raw_line.decode("utf-8", errors="ignore")
+    else:
+        line = str(raw_line)
+    line = line.strip()
+
+    if not line:
+        return False, ""
+    if line.startswith("data:"):
+        line = line[5:].strip()
+    if line == "[DONE]":
+        return True, ""
+
+    try:
+        chunk = json.loads(line)
+    except ValueError:
+        return False, ""
+    if not isinstance(chunk, dict):
+        return False, ""
+
+    content = chunk.get("content")
+    if isinstance(content, str) and content:
+        return False, content
+
+    choices = chunk.get("choices")
+    if isinstance(choices, list) and choices:
+        first = choices[0]
+        if isinstance(first, dict):
+            text = first.get("text")
+            if isinstance(text, str):
+                return False, text
+    return False, ""
 
 
 def clean_model_text(text) -> str:
@@ -53,6 +118,23 @@ def clean_model_text(text) -> str:
     text = THINK_RE.sub("", text)
     text = OPEN_THINK_RE.sub("", text)
     text = text.replace("<|im_end|>", "").strip()
+    return text
+
+
+def _clean_keyword(value) -> str:
+    """Turn one model-provided keyword into a short phrase, or "" if it is prose."""
+    text = clean_model_text(str(value or ""))
+    text = TOOL_MARKUP_RE.sub(" ", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    text = text.strip(" \t\r\n\"'`.,;:!?[](){}<>")
+    if not text or len(text) < 2 or len(text) > 60 or len(text.split()) > 5:
+        return ""
+    if PROSE_STARTER_RE.match(text):
+        return ""
+    if re.search(r"[.!?](?:\s|$)", text):
+        return ""
+    if re.search(r"[<>|]", text):
+        return ""
     return text
 
 
@@ -97,7 +179,8 @@ SEARCH_KEYWORDS_TOOL = {
         "description": (
             "Extract the most useful search keywords from the user's question so the "
             "librarian can look up local study cards. Prefer specific names, part "
-            "numbers and technical terms."
+            "numbers and technical terms. Always call this tool, even when the "
+            "question is vague; never ask the user for clarification."
         ),
         "parameters": {
             "type": "object",
@@ -113,8 +196,7 @@ SEARCH_KEYWORDS_TOOL = {
     },
 }
 
-KEYWORDS_SYSTEM = """You extract search keywords from the user's question for a local study-card lookup.
-Always call the search_keywords tool. Keep each keyword short and specific, and keep the user's exact names and part numbers."""
+KEYWORDS_SYSTEM = "List the key search terms in the question."
 
 
 def _step(kind, label, detail, status="done") -> dict:
@@ -180,76 +262,20 @@ def _context_block(sources) -> str:
     return "\n\n".join(chunks)
 
 
-def _summary(answer, sources, fallback) -> str:
-    local_only = bool(sources) and all(hit.engine == "study_cards" for hit in sources)
-    if fallback:
-        if sources:
-            kind = "study cards" if local_only else "web results"
-            return f"The local model is unavailable. Showing the top {len(sources)} {kind} instead."
-        return "The local model is unavailable and no sources were found."
-
-    text = re.sub(r"```.*?```", " ", answer, flags=re.S)
-    text = re.sub(r"\s*\[[0-9]+\]", "", text)
-    text = re.sub(r"[*_#>`]", "", text)
-    text = re.sub(r"\s+([,.;:!?])", r"\1", text)
-    text = re.sub(r"(?:,\s*)+(?:or|and)?\s*\.", ".", text)
-    text = re.sub(r"\s+", " ", text).strip()
-    sentences = re.split(r"(?<=[.!?])\s+", text)
-    summary = sentences[0].strip() if sentences else text
-    if len(summary) < 70 and len(sentences) > 1:
-        candidate = sentences[1].strip()
-        blocked = ("for example", "example", "here", "e.g", "or")
-        if candidate and not candidate.lower().startswith(blocked) and not candidate.endswith(":"):
-            summary = f"{summary} {candidate}"
-    if len(summary) > 260:
-        summary = summary[:257].rsplit(" ", 1)[0] + "…"
-    if not summary:
-        if local_only:
-            summary = f"Answered with {len(sources)} study card(s)."
-        else:
-            summary = f"Answered with {len(sources)} web sources." if sources else "Answered by MiniCPM5-2B."
-    return summary
-
-
-def _fallback_answer(sources, error) -> str:
-    if not sources:
-        return (
-            "I could not reach the local MiniCPM5-2B model.\n\n"
-            f"`{error}`\n\n"
-            "Start the app with `./run.sh` (or `run.bat` on Windows) so the local "
-            "model is loaded."
-        )
-
-    local_only = all(hit.engine == "study_cards" for hit in sources)
-    lines = [
-        (
-            "The local model is unavailable, but matching study cards were found. "
-            "Here they are:"
-            if local_only
-            else "The local model is unavailable, but the web search completed. "
-            "Here are the most relevant results:"
-        ),
-        "",
-    ]
-    for index, hit in enumerate(sources[:4], start=1):
-        snippet = (hit.snippet or hit.content[:260]).strip()
-        lines.append(f"{index}. **{hit.title}** — {snippet} [source]({hit.url})")
-    lines.extend(["", f"Model error: `{error}`"])
-    return "\n".join(lines)
-
-
 class Agent:
     def __init__(self) -> None:
         self.model_name = os.getenv("LLM_MODEL", "MiniCPM5-2B")
 
-        self._llm = None
         self._state = "inactive"
         self._loading = False
 
         self._state_lock = threading.Lock()
-        self._llm_lock = threading.Lock()
         self._generate_lock = threading.Lock()
         self._stop_event = threading.Event()
+
+    @property
+    def server_url(self) -> str:
+        return _server_url()
 
     def get_health(self) -> str:
         with self._state_lock:
@@ -267,112 +293,87 @@ class Agent:
         with self._state_lock:
             self._loading = loading
 
-    def _load_model(self):
-        from llama_cpp import Llama
+    def server_available(self) -> bool:
+        try:
+            response = requests.get(f"{self.server_url}/health", timeout=2)
+        except requests.RequestException:
+            return False
+        return response.status_code == 200
 
-        model_path = ensure_model()
-        logger.info("Loading %s from %s", self.model_name, model_path)
-
-        return Llama(
-            model_path=str(model_path),
-            n_ctx=int(os.getenv("N_CTX", "6144")),
-            n_batch=int(os.getenv("N_BATCH", "512")),
-            n_threads=int(os.getenv("N_THREADS", _DEFAULT_THREADS)),
-            n_gpu_layers=int(os.getenv("N_GPU_LAYERS", "0")),
-            chat_format="chatml-function-calling",
-            verbose=False,
-        )
-
-    def _ensure_loaded(self):
-        with self._llm_lock:
-            if self._llm is None:
-                self._set_loading(True)
-                try:
-                    self._llm = self._load_model()
-                except LLMError:
-                    raise
-                except Exception as exc:
-                    raise LLMError(f"Could not load {self.model_name}: {exc}") from exc
-                finally:
-                    self._set_loading(False)
-
-            self._set_state("ready")
-            return self._llm
-
-    def _close_locked(self) -> None:
-        llm = self._llm
-        if llm is not None:
-            self._llm = None
-            try:
-                llm.close()
-            except Exception:
-                logger.exception("Failed to close %s cleanly", self.model_name)
-
-        self._set_state("inactive")
+    def _ensure_server(self) -> None:
+        if not self.server_available():
+            raise LLMError(
+                f"Could not reach the llama.cpp server at {self.server_url}. "
+                "Start it with ./run.sh or run `llama serve` in another terminal."
+            )
 
     def close(self) -> None:
         self._stop_event.set()
+        self._set_state("inactive")
 
-        with self._generate_lock:
-            with self._llm_lock:
-                self._close_locked()
-
-    def _with_model(self, call):
+    def _with_server(self, call):
         with self._generate_lock:
             if self._stop_event.is_set():
                 return None
 
-            llm = self._ensure_loaded()
+            self._ensure_server()
 
             if self._stop_event.is_set():
-                with self._llm_lock:
-                    self._close_locked()
                 return None
 
             self._set_state("loading response")
 
             try:
-                return call(llm)
+                return call()
             finally:
                 if self._stop_event.is_set():
-                    with self._llm_lock:
-                        self._close_locked()
+                    self._set_state("inactive")
                 else:
                     self._set_state("ready")
 
     def _generate(self, messages, temperature, max_tokens) -> str:
-        def call(llm) -> str:
+        def call() -> str:
+            payload = {
+                "model": self.model_name,
+                "prompt": _format_prompt(messages),
+                "stream": True,
+                "max_tokens": max_tokens,
+                "temperature": temperature,
+                "top_p": 0.9,
+                "repeat_penalty": 1.05,
+                "stop": ["<|im_end|>", "<|im_start|>"],
+            }
             pieces: list[str] = []
-            stream = None
 
             try:
-                stream = llm.create_completion(
-                    prompt=_format_prompt(messages),
-                    max_tokens=max_tokens,
-                    temperature=temperature,
-                    top_p=0.9,
-                    repeat_penalty=1.05,
-                    stop=["<|im_end|>", "<|im_start|>"],
+                with requests.post(
+                    f"{self.server_url}/v1/completions",
+                    json=payload,
                     stream=True,
-                )
+                    timeout=(5, 300),
+                ) as response:
+                    if response.status_code >= 400:
+                        raise LLMError(
+                            f"llama.cpp server returned HTTP {response.status_code}: "
+                            f"{_response_error(response)}"
+                        )
 
-                for chunk in stream:
-                    if self._stop_event.is_set():
-                        break
+                    for raw_line in response.iter_lines():
+                        if self._stop_event.is_set():
+                            break
 
-                    piece = chunk["choices"][0].get("text") or ""
-                    if piece:
-                        pieces.append(piece)
-            finally:
-                if stream is not None:
-                    close_stream = getattr(stream, "close", None)
-                    if callable(close_stream):
-                        close_stream()
+                        done, piece = _parse_stream_line(raw_line)
+                        if done:
+                            break
+                        if piece:
+                            pieces.append(piece)
+            except requests.RequestException as exc:
+                raise LLMError(f"llama.cpp request failed: {exc}") from exc
 
             return clean_model_text("".join(pieces))
 
         try:
-            result = self._with_model(call)
+            result = self._with_server(call)
         except LLMError:
             raise
         except Exception as exc:
@@ -381,25 +382,39 @@ class Agent:
         return result if result is not None else ""
 
     def extract_keywords(self, message) -> dict | None:
-        def call(llm):
-            response = llm.create_chat_completion(
-                messages=[
+        def call():
+            payload = {
+                "model": self.model_name,
+                "messages": [
                     {"role": "system", "content": KEYWORDS_SYSTEM},
                     {"role": "user", "content": message[:600]},
                 ],
-                tools=[SEARCH_KEYWORDS_TOOL],
-                tool_choice={"type": "function", "function": {"name": "search_keywords"}},
-                temperature=0.2,
-                top_p=0.95,
-                repeat_penalty=1.15,
-                min_p=0.0,
-                max_tokens=192,
+                "tools": [SEARCH_KEYWORDS_TOOL],
+                "tool_choice": "required",
+                "temperature": 0.1,
+                "top_p": 0.9,
+                "repeat_penalty": 1.15,
+                "max_tokens": 192,
+                "stream": False,
+            }
+            response = requests.post(
+                f"{self.server_url}/v1/chat/completions",
+                json=payload,
+                timeout=(5, 120),
             )
-            tool_calls = response["choices"][0]["message"].get("tool_calls") or []
+            if response.status_code >= 400:
+                return None
+
+            data = response.json()
+            choices = data.get("choices") or []
+            if not choices:
+                return None
+            message_data = choices[0].get("message") or {}
+            tool_calls = message_data.get("tool_calls") or []
             return tool_calls[0] if tool_calls else None
 
         try:
-            return self._with_model(call)
+            return self._with_server(call)
         except LLMError:
             raise
         except Exception as exc:
@@ -613,6 +628,10 @@ class Agent:
         else:
             sources = []
 
+        only_study_cards = bool(sources) and all(
+            hit.engine == "study_cards" for hit in sources
+        )
+
         messages: list[dict[str, str]] = [{"role": "system", "content": ANSWER_SYSTEM}]
         messages.extend(clean_history)
         if sources:
@@ -685,7 +704,11 @@ class Agent:
             except LLMError as exc:
                 llm_failed = True
                 error_text = str(exc)
-                answer = _fallback_answer(sources, error_text)
+                answer = self._fallback_answer(
+                    sources,
+                    error_text,
+                    only_study_cards=only_study_cards,
+                )
                 steps.append(
                     _step(
                         "answer",
@@ -708,7 +731,15 @@ class Agent:
 
         return {
             "answer": answer,
-            "summary": summary or _summary(answer, sources, llm_failed),
+            "summary": (
+                summary
+                or self._summary(
+                    answer,
+                    sources,
+                    llm_failed,
+                    only_study_cards=only_study_cards,
+                )
+            ),
             "sources": source_dicts,
             "tools": tools,
             "steps": steps,
@@ -720,23 +751,106 @@ class Agent:
             "search_study_cards_first": search_study_cards_first,
         }
 
+    def _summary(self, answer, sources, fallback, *, only_study_cards) -> str:
+        if fallback:
+            if sources:
+                kind = "study cards" if only_study_cards else "web results"
+                return (
+                    "The local model is unavailable. "
+                    f"Showing the top {len(sources)} {kind} instead."
+                )
+            return "The local model is unavailable and no sources were found."
+
+        text = re.sub(r"```.*?```", " ", answer, flags=re.S)
+        text = re.sub(r"\s*\[[0-9]+\]", "", text)
+        text = re.sub(r"[*_#>`]", "", text)
+        text = re.sub(r"\s+([,.;:!?])", r"\1", text)
+        text = re.sub(r"(?:,\s*)+(?:or|and)?\s*\.", ".", text)
+        text = re.sub(r"\s+", " ", text).strip()
+        sentences = re.split(r"(?<=[.!?])\s+", text)
+        summary = sentences[0].strip() if sentences else text
+        if len(summary) < 70 and len(sentences) > 1:
+            candidate = sentences[1].strip()
+            blocked = ("for example", "example", "here", "e.g", "or")
+            if (
+                candidate
+                and not candidate.lower().startswith(blocked)
+                and not candidate.endswith(":")
+            ):
+                summary = f"{summary} {candidate}"
+        if len(summary) > 260:
+            summary = summary[:257].rsplit(" ", 1)[0] + "…"
+        if not summary:
+            if only_study_cards:
+                summary = f"Answered with {len(sources)} study card(s)."
+            else:
+                summary = (
+                    f"Answered with {len(sources)} web sources."
+                    if sources
+                    else f"Answered by {self.model_name}."
+                )
+        return summary
+
+    def _fallback_answer(self, sources, error, *, only_study_cards) -> str:
+        if not sources:
+            return (
+                f"I could not reach the local {self.model_name} model.\n\n"
+                f"`{error}`\n\n"
+                "Start the app with `./run.sh` (or `run.bat` on Windows) so the local "
+                "model is loaded."
+            )
+
+        lines = [
+            (
+                "The local model is unavailable, but matching study cards were found. "
+                "Here they are:"
+                if only_study_cards
+                else "The local model is unavailable, but the web search completed. "
+                "Here are the most relevant results:"
+            ),
+            "",
+        ]
+        for index, hit in enumerate(sources[:4], start=1):
+            snippet = (hit.snippet or hit.content[:260]).strip()
+            lines.append(f"{index}. **{hit.title}** — {snippet} [source]({hit.url})")
+        lines.extend(["", f"Model error: `{error}`"])
+        return "\n".join(lines)
+
     @staticmethod
     def _keywords_from_tool_call(tool_call) -> list[str]:
         try:
-            arguments = json.loads(tool_call["function"]["arguments"])
-        except (KeyError, TypeError, ValueError):
+            function = tool_call["function"]
+        except (KeyError, TypeError):
+            return []
+        if not isinstance(function, dict):
             return []
 
-        raw = arguments.get("keywords") if isinstance(arguments, dict) else None
+        arguments = function.get("arguments")
+        if isinstance(arguments, str):
+            arguments = TOOL_MARKUP_RE.sub(" ", arguments)
+            try:
+                arguments = json.loads(arguments)
+            except ValueError:
+                match = re.search(r'"keywords"\s*:\s*(\[[^\]]*\])', arguments, re.S)
+                if not match:
+                    return []
+                try:
+                    arguments = {"keywords": json.loads(match.group(1))}
+                except ValueError:
+                    return []
+        if not isinstance(arguments, dict):
+            return []
+
+        raw = arguments.get("keywords")
         if not isinstance(raw, list):
             return []
 
         seen: set[str] = set()
         keywords: list[str] = []
         for item in raw:
-            text = str(item).strip()
+            text = _clean_keyword(item)
             key = text.lower()
-            if len(text) < 2 or key in seen:
+            if not text or key in seen:
                 continue
             seen.add(key)
             keywords.append(text)

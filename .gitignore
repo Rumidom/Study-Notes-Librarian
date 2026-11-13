@@ -2,5 +2,7 @@
 __pycache__/
 *.pyc
 .env
+llama-server.log
+logs/
 models/*.gguf
 models/*.part

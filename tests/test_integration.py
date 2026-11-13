@@ -10,6 +10,16 @@ import tools
 from agent import Agent
 
 
+def server_is_running() -> bool:
+    return Agent().server_available()
+
+
+requires_server = unittest.skipUnless(
+    server_is_running(),
+    "llama.cpp server is not running (start it with ./run.sh)",
+)
+
+
 def setUpModule():
     os.environ.setdefault("N_CTX", "2048")
     os.environ.setdefault("MAX_TOKENS", "64")
@@ -24,6 +34,7 @@ class ModelFileTests(unittest.TestCase):
         self.assertTrue(path.is_file())
 
 
+@requires_server
 class AgentTests(unittest.TestCase):
     def test_generates_answer_and_transitions_health(self):
         agent = Agent()
@@ -49,7 +60,7 @@ class AgentTests(unittest.TestCase):
         self.assertTrue(result["sources"])
         self.assertEqual(result["sources"][0]["engine"], "study_cards")
         self.assertIn("search_keywords", [tool["name"] for tool in result["tools"]])
-        self.assertIsNotNone(agent._llm)
+        self.assertTrue(agent.server_available())
 
     def test_extract_keywords_returns_tool_call(self):
         agent = Agent()
@@ -86,7 +97,7 @@ class AgentTests(unittest.TestCase):
 
         self.assertIn("answer Composing", [step["label"] for step in result["steps"]])
 
-    def test_stop_unloads_model(self):
+    def test_stop_cancels_generation(self):
         agent = Agent()
         self.addCleanup(agent.close)
         previous = os.environ.get("MAX_TOKENS")
@@ -116,7 +127,7 @@ class AgentTests(unittest.TestCase):
         self.assertFalse(thread.is_alive())
         self.assertTrue(outcome.get("stopped"))
         self.assertEqual(agent.get_health(), "inactive")
-        self.assertIsNone(agent._llm)
+        self.assertTrue(agent.server_available())
 
 
 class KeywordToolCallTests(unittest.TestCase):
@@ -136,6 +147,32 @@ class KeywordToolCallTests(unittest.TestCase):
             Agent._keywords_from_tool_call({"function": {"arguments": '{"keywords": "x"}'}}),
             [],
         )
+
+    def test_strips_tool_markup_and_prose(self):
+        tool_call = {
+            "function": {
+                "arguments": (
+                    '{"keywords": ['
+                    '"</param></function>> I need more context from the user",'
+                    '"electric Ferrari", "Ferrari EV specs"]}'
+                    "</param></function>"
+                )
+            }
+        }
+
+        self.assertEqual(
+            Agent._keywords_from_tool_call(tool_call),
+            ["electric Ferrari", "Ferrari EV specs"],
+        )
+
+    def test_recovers_keywords_from_wrapped_arguments(self):
+        tool_call = {
+            "function": {
+                "arguments": '> "keywords": ["electric Ferrari"]</function>'
+            }
+        }
+
+        self.assertEqual(Agent._keywords_from_tool_call(tool_call), ["electric Ferrari"])
 
 
 class StudyCardSearchTests(unittest.TestCase):
@@ -169,6 +206,7 @@ class AppTests(unittest.TestCase):
         self.assertEqual(body["status"], "inactive")
         self.assertFalse(body["loading"])
 
+    @requires_server
     def test_chat_round_trip_then_stop(self):
         response = self.client.post("/api/chat", json={"message": "hello there friend"})
         self.assertEqual(response.status_code, 200)

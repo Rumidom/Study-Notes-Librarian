@@ -361,7 +361,6 @@ function setTraceLoading() {
     <div class="trace-block">
       <div class="block-head">
         <h3>Working</h3>
-        <span class="block-count">live</span>
       </div>
       <p class="summary-text">${summary}</p>
     </div>
@@ -369,7 +368,6 @@ function setTraceLoading() {
     <div class="trace-block">
       <div class="block-head">
         <h3>Flow</h3>
-        <span class="block-count">live</span>
       </div>
       <div class="flow">
         ${labels
@@ -381,7 +379,6 @@ function setTraceLoading() {
             </div>
             <div class="flow-content">
               <div class="flow-title">${label}</div>
-              <div class="flow-detail">waiting…</div>
             </div>
           </div>`
           )

@@ -66,6 +66,13 @@ CONFIG_GROUPS = [
         "restart": True,
         "fields": [
             {
+                "key": "LLM_MODEL",
+                "label": "Model name",
+                "type": "text",
+                "default": "MiniCPM5-2B",
+                "hint": "Name shown in the UI and sent to the llama.cpp server.",
+            },
+            {
                 "key": "MAX_TOKENS",
                 "label": "Max answer tokens",
                 "type": "int",
@@ -81,6 +88,22 @@ CONFIG_GROUPS = [
                 "type": "text",
                 "default": "MiniCPM5-2B-Q4_K_M.gguf",
                 "hint": "GGUF file downloaded from the repository.",
+            },
+            {
+                "key": "LLAMA_SERVER_HOST",
+                "label": "llama.cpp host",
+                "type": "text",
+                "default": "127.0.0.1",
+                "hint": "Address where run.sh starts the llama.cpp server.",
+            },
+            {
+                "key": "LLAMA_SERVER_PORT",
+                "label": "llama.cpp port",
+                "type": "int",
+                "default": "5001",
+                "min": 1,
+                "max": 65535,
+                "hint": "Port used by the llama.cpp server and the app's HTTP client.",
             },
             {
                 "key": "N_CTX",
@@ -381,7 +404,7 @@ def health():
             "status": agent.get_health(),
             "loading": agent.is_loading(),
             "model": agent.model_name,
-            "backend": "llama.cpp · local",
+            "backend": "llama.cpp server · local",
         }
     )
 
