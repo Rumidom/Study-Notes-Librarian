@@ -7,7 +7,7 @@ import unittest
 
 import download_and_check_model
 import tools
-from agent import Agent
+from agent import Agent, _context_block
 
 
 def server_is_running() -> bool:
@@ -173,6 +173,47 @@ class KeywordToolCallTests(unittest.TestCase):
         }
 
         self.assertEqual(Agent._keywords_from_tool_call(tool_call), ["electric Ferrari"])
+
+
+class SourceSummaryTests(unittest.TestCase):
+    def test_summary_is_cleaned_and_clamped(self):
+        summary = Agent._clean_summary(
+            "1. </param>Ferrari Luce makes 1,035 hp</function>", 200
+        )
+        self.assertEqual(summary, "Ferrari Luce makes 1,035 hp")
+
+        long = Agent._clean_summary("x" * 300, 200)
+        self.assertEqual(len(long), 200)
+        self.assertTrue(long.endswith("…"))
+
+    def test_context_block_uses_summaries(self):
+        hit = tools.SearchHit(
+            title="Ferrari Luce",
+            url="https://example.com/luce",
+            snippet="short",
+            engine="duckduckgo",
+            content="C" * 3000,
+        )
+
+        block = _context_block([hit], ["Luce: 1,035 hp, 122 kWh battery."])
+
+        self.assertIn("Summary: Luce: 1,035 hp, 122 kWh battery.", block)
+        self.assertNotIn("Excerpt:", block)
+
+    def test_context_block_falls_back_to_excerpt(self):
+        hit = tools.SearchHit(
+            title="Ferrari Luce",
+            url="https://example.com/luce",
+            snippet="short",
+            engine="duckduckgo",
+            content="C" * 3000,
+        )
+
+        block = _context_block([hit])
+
+        self.assertIn("Excerpt: ", block)
+        self.assertNotIn("C" * 1401, block)
+        self.assertIn("C" * 1400, block)
 
 
 class StudyCardSearchTests(unittest.TestCase):

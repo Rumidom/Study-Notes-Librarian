@@ -198,6 +198,11 @@ SEARCH_KEYWORDS_TOOL = {
 
 KEYWORDS_SYSTEM = "List the key search terms in the question."
 
+SUMMARIES_SYSTEM = (
+    "Summarize the source in a short summary. "
+    "Keep only the information relevant to the question."
+)
+
 
 def _step(kind, label, detail, status="done") -> dict:
     return {"kind": kind, "label": label, "detail": detail, "status": status}
@@ -247,15 +252,20 @@ def _build_queries(message) -> list[str]:
     return unique[:2]
 
 
-def _context_block(sources) -> str:
+def _context_block(sources, summaries=None) -> str:
+    excerpt_chars = int(os.getenv("SOURCE_EXCERPT_CHARS", "1400"))
     chunks: list[str] = []
     for index, hit in enumerate(sources, start=1):
-        excerpt = hit.content or hit.snippet
+        summary = ""
+        if summaries and index <= len(summaries):
+            summary = summaries[index - 1] or ""
+        text = summary or (hit.content or hit.snippet)[:excerpt_chars]
+        label = "Summary" if summary else "Excerpt"
         kind = "study card" if hit.engine == "study_cards" else "web source"
         chunks.append(
             f"[{index}] {hit.title} · {kind}\n"
             f"URL: {hit.url}\n"
-            f"Excerpt: {excerpt[:700]}"
+            f"{label}: {text}"
         )
         if hit.code:
             chunks.append(f"Code excerpt:\n{hit.code[:700]}")
@@ -279,7 +289,14 @@ class Agent:
 
     def get_health(self) -> str:
         with self._state_lock:
-            return self._state
+            state = self._state
+        if (
+            state == "inactive"
+            and not self._stop_event.is_set()
+            and self.server_available()
+        ):
+            return "ready"
+        return state
 
     def is_loading(self) -> bool:
         with self._state_lock:
@@ -419,6 +436,47 @@ class Agent:
             raise
         except Exception as exc:
             raise LLMError(f"{self.model_name} keyword extraction failed: {exc}") from exc
+
+    def _summarize_sources(self, message, sources) -> list[str] | None:
+        excerpt_chars = int(os.getenv("SOURCE_EXCERPT_CHARS", "1400"))
+        limit = int(os.getenv("SOURCE_SUMMARY_CHARS", "500"))
+        summaries: list[str] = []
+
+        for hit in sources:
+            text = (hit.content or hit.snippet or "").strip()
+            if not text:
+                summaries.append("")
+                continue
+            try:
+                out = self._generate(
+                    [
+                        {"role": "system", "content": SUMMARIES_SYSTEM},
+                        {
+                            "role": "user",
+                            "content": (
+                                f"Question: {message[:200]}\n\n"
+                                f"Source:\n{text[:excerpt_chars]}"
+                            ),
+                        },
+                    ],
+                    temperature=0.2,
+                    max_tokens=120,
+                )
+            except LLMError:
+                out = ""
+            summaries.append(self._clean_summary(out, limit))
+
+        return summaries or None
+
+    @staticmethod
+    def _clean_summary(text, limit=500) -> str:
+        text = clean_model_text(str(text or ""))
+        text = TOOL_MARKUP_RE.sub(" ", text)
+        text = re.sub(r"\s+", " ", text).strip()
+        text = re.sub(r"^\d+[.)]\s*", "", text)
+        if len(text) > limit:
+            text = text[: limit - 1].rsplit(" ", 1)[0].rstrip() + "…"
+        return text
 
     def run(self, message, history=None, search_study_cards_first=True) -> dict:
         started = time.monotonic()
@@ -632,6 +690,38 @@ class Agent:
             hit.engine == "study_cards" for hit in sources
         )
 
+        summaries: list[str] = []
+        if sources and not local_hits:
+            try:
+                summaries = self._summarize_sources(message, sources) or []
+            except LLMError:
+                summaries = []
+            ok = len(summaries) == len(sources) and all(summaries)
+            tools.append(
+                {
+                    "name": "source_summaries",
+                    "label": "Source summaries",
+                    "detail": (
+                        f"{len(summaries)} summar{'y' if len(summaries) == 1 else 'ies'}"
+                        if ok
+                        else "fallback to excerpts"
+                    ),
+                    "status": "done" if ok else "skipped",
+                }
+            )
+            steps.append(
+                _step(
+                    "tool",
+                    "summarize sources",
+                    (
+                        f"Condensed {len(sources)} source(s) into short summaries."
+                        if ok
+                        else "Summaries were unusable; used source excerpts instead."
+                    ),
+                    "done" if ok else "skipped",
+                )
+            )
+
         messages: list[dict[str, str]] = [{"role": "system", "content": ANSWER_SYSTEM}]
         messages.extend(clean_history)
         if sources:
@@ -640,7 +730,7 @@ class Agent:
                     "role": "user",
                     "content": (
                         f"Question:\n{message}\n\n"
-                        f"Sources:\n{_context_block(sources)}\n\n"
+                        f"Sources:\n{_context_block(sources, summaries)}\n\n"
                         "Answer the question using these sources and cite them inline."
                     ),
                 }
