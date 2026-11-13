@@ -90,14 +90,14 @@ class AgentTests(unittest.TestCase):
 
         result = agent.run("flurble wibble")
 
-        step = next(step for step in result["steps"] if step["label"] == "study cards check")
+        step = next(step for step in result["steps"] if step["label"] == "Study cards check")
         self.assertEqual(step["status"], "done")
         self.assertIn("No cards matched", step["detail"])
 
         tool = next(tool for tool in result["tools"] if tool["name"] == "study_cards")
         self.assertEqual(tool["status"], "done")
 
-        self.assertIn("answer Composing", [step["label"] for step in result["steps"]])
+        self.assertIn("Composing answer", [step["label"] for step in result["steps"]])
 
     def test_stop_cancels_generation(self):
         agent = Agent()

@@ -707,7 +707,7 @@ class Agent:
             steps.append(
                 _step(
                     "tool",
-                    "search_keywords",
+                    "Search keywords",
                     (
                         f"Keywords: {', '.join(keywords)}"
                         if keywords
@@ -738,7 +738,7 @@ class Agent:
                         removed += f" (+{len(rejected) - 2})"
                     detail += f" · removed {removed}"
 
-                steps.append(_step("tool", "study cards check", detail, status))
+                steps.append(_step("tool", "Study cards check", detail, status))
                 tools.append(
                     {
                         "name": "study_cards",
@@ -754,7 +754,7 @@ class Agent:
                 steps.append(
                     _step(
                         "tool",
-                        "study cards check",
+                        "Study cards check",
                         f'No cards matched "{base_query[:80]}".',
                         "done",
                     )
@@ -884,7 +884,7 @@ class Agent:
             steps.append(
                 _step(
                     "tool",
-                    "summarize sources",
+                    "Summarize sources",
                     (
                         f"Condensed {len(sources)} source(s) into short summaries."
                         if ok
@@ -946,7 +946,7 @@ class Agent:
                     steps.append(
                         _step(
                             "answer",
-                            "answer Composing",
+                            "Composing answer",
                             f"{self.model_name} · {len(sources)} sources · "
                             f"{len(answer.split())} words",
                         )
@@ -984,7 +984,7 @@ class Agent:
                 {
                     "name": "minicpm5-2b",
                     "label": self.model_name,
-                    "detail": "fallback answer" if llm_failed else "answer composing",
+                    "detail": "fallback answer" if llm_failed else "composing answer",
                     "status": "failed" if llm_failed else "done",
                 }
             )
