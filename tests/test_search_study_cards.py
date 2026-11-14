@@ -205,6 +205,11 @@ class SearchStudyCardsTests(unittest.TestCase):
             ["7400 quad nand chip [74LS00-74HC00]"],
         )
 
+    def test_pinout_question_ignores_unrelated_cards(self):
+        self.write("for loop in c.md", "# for loop in c\n\nfor (int i = 0; i < n; i++) {}\n")
+
+        self.assertEqual(self.search("what is the pinout for the pi pico?"), [])
+
 
 if __name__ == "__main__":
     unittest.main()

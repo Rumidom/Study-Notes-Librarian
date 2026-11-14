@@ -222,13 +222,17 @@ CARD_RELEVANCE_TOOL = {
     "type": "function",
     "function": {
         "name": "card_is_relevant",
-        "description": "Report whether the study card relates to the user's question.",
+        "description": "Report whether the study card answers the user's question.",
         "parameters": {
             "type": "object",
             "properties": {
                 "relevant": {
                     "type": "boolean",
-                    "description": "true when the card is about the question, false when it is unrelated."
+                    "description": (
+                        "true only when the card answers the question or contains "
+                        "the requested information; false when it is unrelated or "
+                        "merely shares keywords."
+                    )
                 }
             },
             "required": ["relevant"],
@@ -237,9 +241,10 @@ CARD_RELEVANCE_TOOL = {
 }
 
 CARD_RELEVANCE_SYSTEM = (
-    "Does the study card relate to the question? "
-    "Call card_is_relevant with relevant=true if the card is about the topic, "
-    "relevant=false if it is unrelated."
+    "Decide whether the study card answers the user's question or contains the "
+    "information the user is after. "
+    "Call card_is_relevant with relevant=true only when the card contains the "
+    "specific information requested.  relevant=false otherwise."
 )
 
 
@@ -643,7 +648,7 @@ class Agent:
         steps: list[dict] = [
             _step("input", "Question received", message[:220]),
         ]
-        tools: list[dict] = []
+        tool_trace: list[dict] = []
         sources: list[SearchHit] = []
         llm_failed = False
         error_text = ""
@@ -696,7 +701,7 @@ class Agent:
             if tool_call is not None:
                 keywords = self._keywords_from_tool_call(tool_call)
 
-            tools.append(
+            tool_trace.append(
                 {
                     "name": "search_keywords",
                     "label": "Keyword extraction",
@@ -739,7 +744,7 @@ class Agent:
                     detail += f" · removed {removed}"
 
                 steps.append(_step("tool", "Study cards check", detail, status))
-                tools.append(
+                tool_trace.append(
                     {
                         "name": "study_cards",
                         "label": "study cards check",
@@ -759,7 +764,7 @@ class Agent:
                         "done",
                     )
                 )
-                tools.append(
+                tool_trace.append(
                     {
                         "name": "study_cards",
                         "label": "study cards check",
@@ -788,7 +793,7 @@ class Agent:
             )
 
             ddg = engine_info["duckduckgo"]
-            tools.append(
+            tool_trace.append(
                 {
                     "name": "duckduckgo",
                     "label": "DuckDuckGo",
@@ -806,7 +811,7 @@ class Agent:
             )
 
             brave = engine_info["brave"]
-            tools.append(
+            tool_trace.append(
                 {
                     "name": "brave",
                     "label": "Brave Search",
@@ -838,7 +843,7 @@ class Agent:
                         "done" if fetched else "skipped",
                     )
                 )
-                tools.append(
+                tool_trace.append(
                     {
                         "name": "page_reader",
                         "label": "Page reader",
@@ -869,7 +874,7 @@ class Agent:
             except LLMError:
                 summaries = []
             ok = len(summaries) == len(sources) and all(summaries)
-            tools.append(
+            tool_trace.append(
                 {
                     "name": "source_summaries",
                     "label": "Source summaries",
@@ -980,7 +985,7 @@ class Agent:
                     )
                 )
 
-            tools.append(
+            tool_trace.append(
                 {
                     "name": "minicpm5-2b",
                     "label": self.model_name,
@@ -1003,7 +1008,7 @@ class Agent:
                 )
             ),
             "sources": source_dicts,
-            "tools": tools,
+            "tools": tool_trace,
             "steps": steps,
             "model": self.model_name,
             "backend": "llama.cpp",

@@ -285,6 +285,71 @@ class CardRelevanceTests(unittest.TestCase):
         self.assertEqual(rejected, [])
 
 
+class CardRelevanceModelTests(unittest.TestCase):
+    """How well the model keeps useful cards and drops the rest.
+
+    Each case is (question, real study card, expected relevance). A case only
+    checks the relevance decision, not the final answer.
+    """
+
+    CASES = [
+        # Cards that do answer the question.
+        ("pi pico ADC", "Pi Pico SDK/pi pico ADC.md", True),
+        ("what is the maximum ADC value on the pi pico?", "Pi Pico SDK/pi pico ADC.md", True),
+        ("how do I use a for loop in C?", "C Programing Language/for loop in c.md", True),
+        (
+            "what does the 74HC00 chip do?",
+            "7400 Series Chips/7400 quad nand chip [74LS00-74HC00].md",
+            True,
+        ),
+        # Cards that share keywords but do not answer the question.
+        ("what is the pinout for the pi pico?", "Pi Pico SDK/pi pico ADC.md", False),
+        ("what is the pin-out for the 74HC00 chip?", "Pi Pico SDK/pi pico ADC.md", False),
+        ("what is the pinout for the pi pico?", "C Programing Language/for loop in c.md", False),
+        ("what is the pinout for the pi pico?", "Sample Card Folder/sample card.md", False),
+        ("how do I use a for loop in C?", "Pi Pico SDK/pi pico ADC.md", False),
+        (
+            "how do I use a for loop in C?",
+            "7400 Series Chips/7400 quad nand chip [74LS00-74HC00].md",
+            False,
+        ),
+    ]
+
+    def _card(self, relative) -> tools.SearchHit:
+        path = tools.STUDY_CARDS_DIR / relative
+        content = path.read_text(encoding="utf-8")
+        return tools.SearchHit(
+            title=path.stem,
+            url="",
+            snippet="",
+            engine="study_cards",
+            content=content,
+        )
+
+    def test_relevance_decisions_on_real_cards(self):
+        agent = Agent()
+        self.addCleanup(agent.close)
+
+        results = []
+        for question, relative, expected in self.CASES:
+            card = self._card(relative)
+            actual = agent.check_card_relevance(question, card)
+            results.append((question, card.title, expected, actual))
+
+        correct = sum(1 for _, _, expected, actual in results if actual is expected)
+        print(f"\ncard relevance: {correct}/{len(results)} correct")
+        for question, title, expected, actual in results:
+            mark = "ok " if actual is expected else "BAD"
+            print(
+                f"  {mark} expected={expected!s:5} got={actual!s:5} | "
+                f"{question!r} + {title}"
+            )
+
+        for question, title, expected, actual in results:
+            with self.subTest(question=question, card=title):
+                self.assertIs(actual, expected)
+
+
 class StudyCardSearchTests(unittest.TestCase):
     def test_natural_question_finds_chip_card(self):
         hits = tools.search_study_cards("what is the pin-out for the 74HC00 chip")
