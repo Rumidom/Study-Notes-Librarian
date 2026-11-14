@@ -61,6 +61,14 @@ def _server_url() -> str:
     return f"http://{host}:{port}"
 
 
+def _env_int(name: str, default: int) -> int:
+    """Read an integer setting, falling back to the default when it is invalid."""
+    try:
+        return int(os.getenv(name, default))
+    except (TypeError, ValueError):
+        return default
+
+
 def _response_error(response) -> str:
     try:
         data = response.json()
@@ -117,8 +125,7 @@ def clean_model_text(text) -> str:
     text = SPECIAL_RE.sub("", text or "")
     text = THINK_RE.sub("", text)
     text = OPEN_THINK_RE.sub("", text)
-    text = text.replace("<|im_end|>", "").strip()
-    return text
+    return text.strip()
 
 
 def _clean_keyword(value) -> str:
@@ -170,7 +177,7 @@ def _format_prompt(messages) -> str:
     return "".join(blocks)
 
 
-ANSWER_SYSTEM = """You are a librarian, a concise technical assistant powered by MiniCPM5-2B,
+ANSWER_SYSTEM = """You are a librarian, a concise technical assistant powered by {model},
 Use the provided sources (local study cards or web results) to answer the question. 
 
 Rules:
@@ -184,7 +191,7 @@ Rules:
 - Keep prose under 120 words unless code needs more.
 """
 
-CHAT_SYSTEM = """You are study notes librarian, a concise technical assistant powered by MiniCPM5-2B
+CHAT_SYSTEM = """You are study notes librarian, a concise technical assistant powered by {model}
 Answer directly and briefly. Do not show chain-of-thought or <think> tags."""
 
 SEARCH_KEYWORDS_TOOL = {
@@ -252,28 +259,32 @@ def _step(kind, label, detail, status="done") -> dict:
     return {"kind": kind, "label": label, "detail": detail, "status": status}
 
 
+def _tool(name, label, detail, status="done") -> dict:
+    return {"name": name, "label": label, "detail": detail, "status": status}
+
+
+def _is_casual(text: str) -> bool:
+    """Small talk or a fixed no-search phrase; short messages only for small talk."""
+    if NO_SEARCH_RE.search(text):
+        return True
+    return bool(SMALLTALK_RE.search(text) and len(text.split()) <= 12)
+
+
 def _should_search(message) -> bool:
     text = message.strip()
     if not text:
         return False
+    # Explicit search/code/current-info words win over the casual-chat checks.
     if SEARCH_TRIGGER_RE.search(text):
         return True
-    if NO_SEARCH_RE.search(text):
-        return False
-    if SMALLTALK_RE.search(text) and len(text.split()) <= 12:
+    if _is_casual(text):
         return False
     return len(text.split()) >= 3 or "?" in text
 
 
 def _should_check_cards(message) -> bool:
     text = message.strip()
-    if not text:
-        return False
-    if NO_SEARCH_RE.search(text):
-        return False
-    if SMALLTALK_RE.search(text) and len(text.split()) <= 12:
-        return False
-    return True
+    return bool(text and not _is_casual(text))
 
 
 def _build_queries(message) -> list[str]:
@@ -297,7 +308,7 @@ def _build_queries(message) -> list[str]:
 
 
 def _context_block(sources, summaries=None) -> str:
-    excerpt_chars = int(os.getenv("SOURCE_EXCERPT_CHARS", "1400"))
+    excerpt_chars = _env_int("SOURCE_EXCERPT_CHARS", 1400)
     chunks: list[str] = []
     for index, hit in enumerate(sources, start=1):
         summary = ""
@@ -576,7 +587,7 @@ class Agent:
             return _as_bool(match.group(1))
         return None
 
-    def _filter_relevant_cards(self, message, cards, web_available=False) -> tuple[list, list]:
+    def _filter_relevant_cards(self, message, cards) -> tuple[list, list]:
         """Drop cards the model says do not answer the question; keep rank order."""
         remaining = list(cards)
         kept: list = []
@@ -600,8 +611,8 @@ class Agent:
         return kept, rejected
 
     def _summarize_sources(self, message, sources) -> list[str] | None:
-        excerpt_chars = int(os.getenv("SOURCE_EXCERPT_CHARS", "1400"))
-        limit = int(os.getenv("SOURCE_SUMMARY_CHARS", "500"))
+        excerpt_chars = _env_int("SOURCE_EXCERPT_CHARS", 1400)
+        limit = _env_int("SOURCE_SUMMARY_CHARS", 500)
         summaries: list[str] = []
 
         for hit in sources:
@@ -640,26 +651,14 @@ class Agent:
             text = text[: limit - 1].rsplit(" ", 1)[0].rstrip() + "…"
         return text
 
-    def run(self, message, history=None, search_study_cards_first=True) -> dict:
-        started = time.monotonic()
-        self._stop_event.clear()
-        max_sources = int(os.getenv("MAX_SOURCES", "3"))
-        clean_history = self._clean_history(history)
-        steps: list[dict] = [
-            _step("input", "Question received", message[:220]),
-        ]
-        tool_trace: list[dict] = []
-        sources: list[SearchHit] = []
-        llm_failed = False
-        error_text = ""
-
+    def _plan_research(
+        self, message, search_study_cards_first, steps
+    ) -> tuple[bool, list[str], bool]:
         do_search = _should_search(message)
         if not search_study_cards_first and _should_check_cards(message):
             do_search = True
         queries = _build_queries(message) if do_search else []
-        base_query = queries[0] if queries else message.strip()
         check_cards = search_study_cards_first and _should_check_cards(message)
-        local_hits: list[SearchHit] = []
 
         if do_search:
             if search_study_cards_first:
@@ -686,94 +685,317 @@ class Agent:
                 _step(
                     "plan",
                     "Skipped web search",
-                    "This looks like casual chat, so MiniCPM5-2B answered directly.",
+                    f"This looks like casual chat, so {self.model_name} answered directly.",
                     "skipped",
                 )
             )
 
-        if check_cards and base_query:
-            keywords: list[str] = []
-            try:
-                tool_call = self.extract_keywords(message)
-            except LLMError:
-                tool_call = None
+        return do_search, queries, check_cards
 
-            if tool_call is not None:
-                keywords = self._keywords_from_tool_call(tool_call)
+    def _study_card_sources(
+        self, message, base_query, queries, max_sources, steps, tools
+    ) -> list[SearchHit]:
+        keywords: list[str] = []
+        try:
+            tool_call = self.extract_keywords(message)
+        except LLMError:
+            tool_call = None
 
-            tool_trace.append(
-                {
-                    "name": "search_keywords",
-                    "label": "Keyword extraction",
-                    "detail": ", ".join(keywords) if keywords else "fallback to the raw question",
-                    "status": "done" if keywords else "skipped",
-                }
+        if tool_call is not None:
+            keywords = self._keywords_from_tool_call(tool_call)
+
+        tools.append(
+            _tool(
+                "search_keywords",
+                "Keyword extraction",
+                ", ".join(keywords) if keywords else "fallback to the raw question",
+                "done" if keywords else "skipped",
             )
+        )
+        steps.append(
+            _step(
+                "tool",
+                "Search keywords",
+                (
+                    f"Keywords: {', '.join(keywords)}"
+                    if keywords
+                    else "Used the raw question as the search query."
+                ),
+                "done" if keywords else "skipped",
+            )
+        )
+
+        local_hits = search_study_cards_multi(keywords or [base_query], limit=max_sources)
+        if not local_hits:
             steps.append(
                 _step(
                     "tool",
-                    "Search keywords",
-                    (
-                        f"Keywords: {', '.join(keywords)}"
-                        if keywords
-                        else "Used the raw question as the search query."
-                    ),
-                    "done" if keywords else "skipped",
+                    "Study Cards Check",
+                    f'No cards matched "{base_query[:80]}".',
+                    "done",
+                )
+            )
+            tools.append(_tool("study_cards", "Study Cards Check", "no matches", "done"))
+            return []
+
+        matched = len(local_hits)
+        local_hits, rejected = self._filter_relevant_cards(message, local_hits)
+        status = "done" if local_hits else "skipped"
+
+        if local_hits:
+            detail = f'Matched {matched} file(s) · kept "{local_hits[0].title}"'
+        else:
+            detail = (
+                f"Matched {matched} file(s) but no card answered the question"
+                + ("; searching the web instead." if queries else ".")
+            )
+        if rejected:
+            removed = ", ".join(f'"{hit.title}"' for hit in rejected[:2])
+            if len(rejected) > 2:
+                removed += f" (+{len(rejected) - 2})"
+            detail += f" · removed {removed}"
+
+        steps.append(_step("tool", "Study Cards Check", detail, status))
+        tools.append(
+            _tool(
+                "study_cards",
+                "Study Cards Check",
+                f"{len(local_hits)} match(es)"
+                + (f" · {len(rejected)} removed" if rejected else ""),
+                status,
+            )
+        )
+        return local_hits
+
+    def _web_sources(self, queries, max_sources, steps, tools) -> list[SearchHit]:
+        sources, engine_info = search_web(
+            queries,
+            limit=5,
+            max_sources=max_sources,
+            fetch_top=max_sources,
+        )
+
+        ddg = engine_info["duckduckgo"]
+        tools.append(
+            _tool(
+                "duckduckgo",
+                "DuckDuckGo",
+                f"{ddg['count']} results" if ddg["status"] != "skipped" else "not used",
+                ddg["status"],
+            )
+        )
+        steps.append(
+            _step(
+                "tool",
+                "DuckDuckGo search",
+                self._engine_detail(ddg),
+                ddg["status"],
+            )
+        )
+
+        brave = engine_info["brave"]
+        tools.append(
+            _tool(
+                "brave",
+                "Brave Search",
+                (
+                    "add BRAVE_API_KEY to enable"
+                    if brave["status"] == "skipped"
+                    else f"{brave['count']} results"
+                ),
+                brave["status"],
+            )
+        )
+        steps.append(
+            _step(
+                "tool",
+                "Brave Search",
+                self._engine_detail(brave),
+                brave["status"],
+            )
+        )
+
+        fetched = sum(1 for hit in sources if hit.fetched)
+        if sources:
+            steps.append(
+                _step(
+                    "read",
+                    "Read top sources",
+                    f"{fetched}/{min(len(sources), max_sources)} pages readable · "
+                    f"{sum(1 for hit in sources if hit.code)} code excerpts",
+                    "done" if fetched else "skipped",
+                )
+            )
+            tools.append(
+                _tool(
+                    "page_reader",
+                    "Page reader",
+                    f"{fetched} pages",
+                    "done" if fetched else "skipped",
+                )
+            )
+        else:
+            steps.append(
+                _step(
+                    "read",
+                    "Read top sources",
+                    "No web results were available to read.",
+                    "failed",
+                )
+            )
+        return sources
+
+    def _summarize_for_answer(self, message, sources, steps, tools) -> list[str]:
+        try:
+            summaries = self._summarize_sources(message, sources) or []
+        except LLMError:
+            summaries = []
+
+        ok = len(summaries) == len(sources) and all(summaries)
+        tools.append(
+            _tool(
+                "source_summaries",
+                "Source summaries",
+                (
+                    f"{len(summaries)} summar{'y' if len(summaries) == 1 else 'ies'}"
+                    if ok
+                    else "fallback to excerpts"
+                ),
+                "done" if ok else "skipped",
+            )
+        )
+        steps.append(
+            _step(
+                "tool",
+                "Summarize sources",
+                (
+                    f"Condensed {len(sources)} source(s) into short summaries."
+                    if ok
+                    else "Summaries were unusable; used source excerpts instead."
+                ),
+                "done" if ok else "skipped",
+            )
+        )
+        return summaries
+
+    def _answer_messages(
+        self, message, clean_history, sources, summaries, do_search
+    ) -> list[dict[str, str]]:
+        if sources:
+            user_prompt = (
+                f"Question:\n{message}\n\n"
+                f"Sources:\n{_context_block(sources, summaries)}\n\n"
+                "Answer the question using these sources and cite them inline."
+            )
+        elif do_search:
+            user_prompt = (
+                f"Question:\n{message}\n\n"
+                "No web results were found. Answer from your own knowledge and "
+                "briefly say that the answer could not be verified online."
+            )
+        else:
+            return [
+                {"role": "system", "content": CHAT_SYSTEM.format(model=self.model_name)},
+                *clean_history,
+                {"role": "user", "content": message},
+            ]
+
+        return [
+            {"role": "system", "content": ANSWER_SYSTEM.format(model=self.model_name)},
+            *clean_history,
+            {"role": "user", "content": user_prompt},
+        ]
+
+    def _compose_answer(
+        self, message, messages, sources, card, only_study_cards, steps, tools
+    ) -> tuple[str, str, bool]:
+        if card is not None:
+            answer = card.content.strip()
+            steps.append(
+                _step(
+                    "answer",
+                    "Presented study card",
+                    f"Exact Markdown · {card.title}",
+                )
+            )
+            return answer, f"Presented the exact study card: {card.title}.", False
+
+        temperature = 0.25 if CODE_RE.search(message) else 0.4
+        max_tokens = _env_int("MAX_TOKENS", 350)
+        llm_failed = False
+
+        try:
+            answer = self._generate(messages, temperature=temperature, max_tokens=max_tokens)
+
+            if answer:
+                steps.append(
+                    _step(
+                        "answer",
+                        "Composing answer",
+                        f"{self.model_name} · {len(sources)} sources · "
+                        f"{len(answer.split())} words",
+                    )
+                )
+            elif self._stop_event.is_set():
+                steps.append(
+                    _step(
+                        "answer",
+                        "Stopped",
+                        "Generation was stopped before an answer was produced.",
+                        "skipped",
+                    )
+                )
+            else:
+                raise LLMError(f"{self.model_name} returned an empty response.")
+
+        except LLMError as exc:
+            llm_failed = True
+            error_text = str(exc)
+            answer = self._fallback_answer(
+                sources,
+                error_text,
+                only_study_cards=only_study_cards,
+            )
+            steps.append(
+                _step(
+                    "answer",
+                    "Model unavailable",
+                    error_text[:240],
+                    "failed",
                 )
             )
 
-            local_hits = search_study_cards_multi(keywords or [base_query], limit=max_sources)
-            if local_hits:
-                matched = len(local_hits)
-                local_hits, rejected = self._filter_relevant_cards(
-                    message, local_hits, web_available=bool(queries)
-                )
-                status = "done" if local_hits else "skipped"
+        tools.append(
+            _tool(
+                "Minicpm5-2b_response",
+                "Answer Write-up",
+                "fallback answer" if llm_failed else "composing answer",
+                "failed" if llm_failed else "done",
+            )
+        )
+        return answer, "", llm_failed
 
-                if local_hits:
-                    detail = f'Matched {matched} file(s) · kept "{local_hits[0].title}"'
-                else:
-                    detail = (
-                        f"Matched {matched} file(s) but no card answered the question"
-                        + ("; searching the web instead." if queries else ".")
-                    )
-                if rejected:
-                    removed = ", ".join(f'"{hit.title}"' for hit in rejected[:2])
-                    if len(rejected) > 2:
-                        removed += f" (+{len(rejected) - 2})"
-                    detail += f" · removed {removed}"
+    def run(self, message, history=None, search_study_cards_first=True) -> dict:
+        started = time.monotonic()
+        self._stop_event.clear()
+        max_sources = _env_int("MAX_SOURCES", 3)
+        clean_history = self._clean_history(history)
+        steps: list[dict] = [_step("input", "Question received", message[:220])]
+        tool_trace: list[dict] = []
+        sources: list[SearchHit] = []
 
-                steps.append(_step("tool", "Study Cards Check", detail, status))
-                tool_trace.append(
-                    {
-                        "name": "study_cards",
-                        "label": "Study Cards Check",
-                        "detail": (
-                            f"{len(local_hits)} match(es)"
-                            + (f" · {len(rejected)} removed" if rejected else "")
-                        ),
-                        "status": status,
-                    }
-                )
-            else:
-                steps.append(
-                    _step(
-                        "tool",
-                        "Study Cards Check",
-                        f'No cards matched "{base_query[:80]}".',
-                        "done",
-                    )
-                )
-                tool_trace.append(
-                    {
-                        "name": "study_cards",
-                        "label": "Study Cards Check",
-                        "detail": "no matches",
-                        "status": "done",
-                    }
-                )
+        do_search, queries, check_cards = self._plan_research(
+            message, search_study_cards_first, steps
+        )
+        base_query = queries[0] if queries else message.strip()
+        local_hits = (
+            self._study_card_sources(
+                message, base_query, queries, max_sources, steps, tool_trace
+            )
+            if check_cards
+            else []
+        )
 
-        engine_info: dict = {}
         if local_hits:
             sources = local_hits
             steps.append(
@@ -785,214 +1007,29 @@ class Agent:
                 )
             )
         elif queries:
-            sources, engine_info = search_web(
-                queries,
-                limit=5,
-                max_sources=max_sources,
-                fetch_top=max_sources,
-            )
-
-            ddg = engine_info["duckduckgo"]
-            tool_trace.append(
-                {
-                    "name": "duckduckgo",
-                    "label": "DuckDuckGo",
-                    "detail": f"{ddg['count']} results" if ddg["status"] != "skipped" else "not used",
-                    "status": ddg["status"],
-                }
-            )
-            steps.append(
-                _step(
-                    "tool",
-                    "DuckDuckGo search",
-                    self._engine_detail(ddg),
-                    ddg["status"],
-                )
-            )
-
-            brave = engine_info["brave"]
-            tool_trace.append(
-                {
-                    "name": "brave",
-                    "label": "Brave Search",
-                    "detail": (
-                        "add BRAVE_API_KEY to enable"
-                        if brave["status"] == "skipped"
-                        else f"{brave['count']} results"
-                    ),
-                    "status": brave["status"],
-                }
-            )
-            steps.append(
-                _step(
-                    "tool",
-                    "Brave Search",
-                    self._engine_detail(brave),
-                    brave["status"],
-                )
-            )
-
-            fetched = sum(1 for hit in sources if hit.fetched)
-            if sources:
-                steps.append(
-                    _step(
-                        "read",
-                        "Read top sources",
-                        f"{fetched}/{min(len(sources), max_sources)} pages readable · "
-                        f"{sum(1 for hit in sources if hit.code)} code excerpts",
-                        "done" if fetched else "skipped",
-                    )
-                )
-                tool_trace.append(
-                    {
-                        "name": "page_reader",
-                        "label": "Page reader",
-                        "detail": f"{fetched} pages",
-                        "status": "done" if fetched else "skipped",
-                    }
-                )
-            else:
-                steps.append(
-                    _step(
-                        "read",
-                        "Read top sources",
-                        "No web results were available to read.",
-                        "failed",
-                    )
-                )
-        else:
-            sources = []
+            sources = self._web_sources(queries, max_sources, steps, tool_trace)
 
         only_study_cards = bool(sources) and all(
             hit.engine == "study_cards" for hit in sources
         )
-
-        summaries: list[str] = []
-        if sources and not local_hits:
-            try:
-                summaries = self._summarize_sources(message, sources) or []
-            except LLMError:
-                summaries = []
-            ok = len(summaries) == len(sources) and all(summaries)
-            tool_trace.append(
-                {
-                    "name": "source_summaries",
-                    "label": "Source summaries",
-                    "detail": (
-                        f"{len(summaries)} summar{'y' if len(summaries) == 1 else 'ies'}"
-                        if ok
-                        else "fallback to excerpts"
-                    ),
-                    "status": "done" if ok else "skipped",
-                }
-            )
-            steps.append(
-                _step(
-                    "tool",
-                    "Summarize sources",
-                    (
-                        f"Condensed {len(sources)} source(s) into short summaries."
-                        if ok
-                        else "Summaries were unusable; used source excerpts instead."
-                    ),
-                    "done" if ok else "skipped",
-                )
-            )
-
-        messages: list[dict[str, str]] = [{"role": "system", "content": ANSWER_SYSTEM}]
-        messages.extend(clean_history)
-        if sources:
-            messages.append(
-                {
-                    "role": "user",
-                    "content": (
-                        f"Question:\n{message}\n\n"
-                        f"Sources:\n{_context_block(sources, summaries)}\n\n"
-                        "Answer the question using these sources and cite them inline."
-                    ),
-                }
-            )
-        elif do_search:
-            messages.append(
-                {
-                    "role": "user",
-                    "content": (
-                        f"Question:\n{message}\n\n"
-                        "No web results were found. Answer from your own knowledge and "
-                        "briefly say that the answer could not be verified online."
-                    ),
-                }
-            )
-        else:
-            messages = [{"role": "system", "content": CHAT_SYSTEM}]
-            messages.extend(clean_history)
-            messages.append({"role": "user", "content": message})
-
-        summary = ""
-        if local_hits:
-            card = local_hits[0]
-            answer = card.content.strip()
-            steps.append(
-                _step(
-                    "answer",
-                    "Presented study card",
-                    f"Exact Markdown · {card.title}",
-                )
-            )
-            summary = f"Presented the exact study card: {card.title}."
-        else:
-            temperature = 0.25 if CODE_RE.search(message) else 0.4
-            max_tokens = int(os.getenv("MAX_TOKENS", "350"))
-
-            try:
-                answer = self._generate(messages, temperature=temperature, max_tokens=max_tokens)
-
-                if answer:
-                    steps.append(
-                        _step(
-                            "answer",
-                            "Composing answer",
-                            f"{self.model_name} · {len(sources)} sources · "
-                            f"{len(answer.split())} words",
-                        )
-                    )
-                elif self._stop_event.is_set():
-                    steps.append(
-                        _step(
-                            "answer",
-                            "Stopped",
-                            "Generation was stopped before an answer was produced.",
-                            "skipped",
-                        )
-                    )
-                else:
-                    raise LLMError(f"{self.model_name} returned an empty response.")
-
-            except LLMError as exc:
-                llm_failed = True
-                error_text = str(exc)
-                answer = self._fallback_answer(
-                    sources,
-                    error_text,
-                    only_study_cards=only_study_cards,
-                )
-                steps.append(
-                    _step(
-                        "answer",
-                        "Model unavailable",
-                        error_text[:240],
-                        "failed",
-                    )
-                )
-
-            tool_trace.append(
-                {
-                    "name": "minicpm5-2b",
-                    "label": "Answer Write-up",
-                    "detail": "fallback answer" if llm_failed else "composing answer",
-                    "status": "failed" if llm_failed else "done",
-                }
-            )
+        summaries = (
+            self._summarize_for_answer(message, sources, steps, tool_trace)
+            if sources and not local_hits
+            else []
+        )
+        messages = self._answer_messages(
+            message, clean_history, sources, summaries, do_search
+        )
+        card = local_hits[0] if local_hits else None
+        answer, summary, llm_failed = self._compose_answer(
+            message,
+            messages,
+            sources,
+            card,
+            only_study_cards,
+            steps,
+            tool_trace,
+        )
 
         source_dicts = [hit.to_dict(index) for index, hit in enumerate(sources, start=1)]
 
