@@ -988,7 +988,7 @@ class Agent:
             tool_trace.append(
                 {
                     "name": "minicpm5-2b",
-                    "label": self.model_name,
+                    "label": "Answer Write-up",
                     "detail": "fallback answer" if llm_failed else "composing answer",
                     "status": "failed" if llm_failed else "done",
                 }

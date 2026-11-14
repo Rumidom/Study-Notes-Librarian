@@ -3,7 +3,7 @@
 ## Pi Pico 1
 ![Pi Pico 1 Pinout](</study_cards/Pi Pico Pinout/images/Pico_1_pinout.png>)
 
-| specs          |        |
+| Specs          |        |
 | -------------- |:------:|
 | Processor      |RP2040  |
 | Clock Speed    |125 MHz |
@@ -18,7 +18,7 @@
 ## Pi Pico 2
 ![Pi Pico 2 Pinout](</study_cards/Pi Pico Pinout/images/Pico_2_pinout.png>)
 
-| specs          |        |
+| Specs          |        |
 | -------------- |:-------|
 | Processor      |RP2350  |
 | Clock Speed    |150 MHz |

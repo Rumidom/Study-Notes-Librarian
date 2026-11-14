@@ -11,7 +11,7 @@ Study-Notes-Librarian prioritizes searching your "study_cards" folder first, you
 - [x] Add study card editor
 - [x] Add configuration page
 - [x] Add card browser to card editor
-- [ ] Refactor code (code works but its a mess)
+- [x] Refactor code (code works but its a mess)
 - [x] Add option to delete cards on the card browser
 
 ## Install
