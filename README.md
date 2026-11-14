@@ -23,7 +23,7 @@ Run ```run.sh``` then access [http://127.0.0.1:5000/](http://127.0.0.1:5000/) on
 #### Windows
 Run ```run.bat``` then access [http://127.0.0.1:5000/](http://127.0.0.1:5000/) on your browser.
 
-The scripts installs llama.cpp if needed, downloads the model, starts the llama.cpp server on `127.0.0.1:5001`, then launches the app.  
+The scripts installs llama.cpp if needed, downloads the model, starts the llama.cpp server on `127.0.0.1:5001`, then launches the app on `127.0.0.1:5000`.  
 
 #### Settings
 On the upper right corner click on settings, add your Brave Search API key then click on save changes. Model and llama.cpp server settings apply after a restart.
