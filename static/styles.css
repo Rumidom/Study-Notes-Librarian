@@ -1590,6 +1590,68 @@ button {
   background: rgba(224, 127, 111, 0.22);
 }
 
+.lightbox-overlay {
+  --lightbox-pad: clamp(12px, 3vw, 40px);
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--lightbox-pad);
+  background: rgba(8, 6, 5, 0.84);
+  backdrop-filter: blur(10px);
+}
+
+.lightbox-overlay[hidden] {
+  display: none;
+}
+
+.lightbox {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  max-width: min(1500px, 100%);
+  max-height: 100%;
+  margin: 0;
+}
+
+.lightbox-image {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: calc(100dvh - (2 * var(--lightbox-pad)) - 40px);
+  border-radius: 10px;
+  background: var(--panel-solid);
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.55);
+  object-fit: contain;
+}
+
+.lightbox-caption {
+  max-width: min(900px, 100%);
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.4;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.lightbox-caption[hidden] {
+  display: none;
+}
+
+.lightbox-close {
+  position: fixed;
+  top: var(--lightbox-pad);
+  right: var(--lightbox-pad);
+  z-index: 1;
+  background: rgba(24, 19, 15, 0.82);
+}
+
 .settings-head {
   flex: 0 0 auto;
   display: flex;

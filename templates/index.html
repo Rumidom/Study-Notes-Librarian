@@ -206,6 +206,18 @@
     </section>
   </div>
 
+  <div class="lightbox-overlay" id="lightboxOverlay" hidden>
+    <figure class="lightbox" role="dialog" aria-modal="true" aria-label="Image preview">
+      <button class="icon-btn lightbox-close" id="lightboxClose" type="button" aria-label="Close image preview">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" aria-hidden="true">
+          <path d="M18 6 6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+      <img class="lightbox-image" id="lightboxImage" alt="" decoding="async">
+      <figcaption class="lightbox-caption" id="lightboxCaption" hidden></figcaption>
+    </figure>
+  </div>
+
   <script src="{{ url_for('static', filename='vendor/marked.umd.js') }}"></script>
   <script src="{{ url_for('static', filename='vendor/purify.min.js') }}"></script>
   <script src="{{ url_for('static', filename='vendor/highlight.min.js') }}"></script>

@@ -50,6 +50,10 @@ const elemts = {
   confirmMessage: document.getElementById("confirmMessage"),
   confirmCancel: document.getElementById("confirmCancel"),
   confirmOk: document.getElementById("confirmOk"),
+  lightboxOverlay: document.getElementById("lightboxOverlay"),
+  lightboxImage: document.getElementById("lightboxImage"),
+  lightboxCaption: document.getElementById("lightboxCaption"),
+  lightboxClose: document.getElementById("lightboxClose"),
 };
 
 const emptyTraceHTML = elemts.traceScroll.innerHTML;
@@ -136,6 +140,18 @@ function enhanceCodeBlocks(container) {
     head.append(label, button);
     pre.replaceWith(wrapper);
     wrapper.append(head, pre);
+  });
+}
+
+function enhanceImages(container) {
+  container.querySelectorAll("img").forEach((img) => {
+    img.classList.add("zoomable");
+    img.tabIndex = 0;
+    img.setAttribute("role", "button");
+    img.setAttribute(
+      "aria-label",
+      img.alt ? `Open image preview: ${img.alt}` : "Open image preview"
+    );
   });
 }
 
@@ -301,6 +317,7 @@ function addMessage(role, content, options = {}) {
   if (role === "assistant") {
     bubble.innerHTML = renderMarkdown(content);
     enhanceCodeBlocks(bubble);
+    enhanceImages(bubble);
     linkCitations(bubble, options.sources || []);
   } else {
     bubble.innerHTML = `<p>${escapeHtml(content).replace(/\n/g, "<br>")}</p>`;
@@ -662,6 +679,13 @@ elemts.chatScroll.addEventListener("click", async (event) => {
     return;
   }
 
+  const image = event.target.closest("img.zoomable");
+  if (image) {
+    event.preventDefault();
+    openLightbox(image);
+    return;
+  }
+
   const copyButton = event.target.closest(".copy-code");
   if (copyButton) {
     const code = copyButton.closest(".code-block")?.querySelector("code")?.innerText || "";
@@ -679,6 +703,14 @@ elemts.chatScroll.addEventListener("click", async (event) => {
       }, 1200);
     }
   }
+});
+
+elemts.chatScroll.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter" && event.key !== " ") return;
+  const image = event.target.closest("img.zoomable");
+  if (!image) return;
+  event.preventDefault();
+  openLightbox(image);
 });
 
 elemts.traceScroll.addEventListener("change", (event) => {
@@ -1179,6 +1211,36 @@ function closeConfirm() {
   confirmAction = null;
 }
 
+let lightboxReturnFocus = null;
+
+function openLightbox(image) {
+  lightboxReturnFocus = document.activeElement;
+  elemts.lightboxImage.src = image.currentSrc || image.src;
+  elemts.lightboxImage.alt = image.alt || "";
+  const caption = (image.alt || "").trim();
+  elemts.lightboxCaption.textContent = caption;
+  elemts.lightboxCaption.hidden = !caption;
+  elemts.lightboxOverlay.hidden = false;
+  elemts.lightboxClose.focus();
+}
+
+function closeLightbox() {
+  if (elemts.lightboxOverlay.hidden) return;
+  elemts.lightboxOverlay.hidden = true;
+  elemts.lightboxImage.removeAttribute("src");
+  elemts.lightboxImage.alt = "";
+  if (lightboxReturnFocus && typeof lightboxReturnFocus.focus === "function") {
+    lightboxReturnFocus.focus();
+  }
+  lightboxReturnFocus = null;
+}
+
+elemts.lightboxClose.addEventListener("click", closeLightbox);
+
+elemts.lightboxOverlay.addEventListener("click", (event) => {
+  if (event.target === elemts.lightboxOverlay) closeLightbox();
+});
+
 elemts.confirmCancel.addEventListener("click", closeConfirm);
 
 elemts.confirmOverlay.addEventListener("click", (event) => {
@@ -1193,7 +1255,9 @@ elemts.confirmOk.addEventListener("click", () => {
 
 document.addEventListener("keydown", (event) => {
   if (event.key !== "Escape") return;
-  if (!elemts.confirmOverlay.hidden) {
+  if (!elemts.lightboxOverlay.hidden) {
+    closeLightbox();
+  } else if (!elemts.confirmOverlay.hidden) {
     closeConfirm();
   } else if (!elemts.settingsOverlay.hidden) {
     closeSettings();

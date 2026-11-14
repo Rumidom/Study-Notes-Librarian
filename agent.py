@@ -743,11 +743,11 @@ class Agent:
                         removed += f" (+{len(rejected) - 2})"
                     detail += f" · removed {removed}"
 
-                steps.append(_step("tool", "Study cards check", detail, status))
+                steps.append(_step("tool", "Study Cards Check", detail, status))
                 tool_trace.append(
                     {
                         "name": "study_cards",
-                        "label": "study cards check",
+                        "label": "Study Cards Check",
                         "detail": (
                             f"{len(local_hits)} match(es)"
                             + (f" · {len(rejected)} removed" if rejected else "")
@@ -759,7 +759,7 @@ class Agent:
                 steps.append(
                     _step(
                         "tool",
-                        "Study cards check",
+                        "Study Cards Check",
                         f'No cards matched "{base_query[:80]}".',
                         "done",
                     )
@@ -767,7 +767,7 @@ class Agent:
                 tool_trace.append(
                     {
                         "name": "study_cards",
-                        "label": "study cards check",
+                        "label": "Study Cards Check",
                         "detail": "no matches",
                         "status": "done",
                     }

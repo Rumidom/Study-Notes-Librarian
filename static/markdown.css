@@ -37,6 +37,12 @@
   max-width: 100%;
   height: auto;
   border-radius: 8px;
+  cursor: zoom-in;
+}
+
+.bubble .markdown-body img.zoomable:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
 }
 
 .bubble .markdown-body blockquote {

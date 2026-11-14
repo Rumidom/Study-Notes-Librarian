@@ -81,7 +81,7 @@ class AgentTests(unittest.TestCase):
         result = agent.run("what is the pin-out for the 74HC00 chip")
 
         titles = [source["title"] for source in result["sources"]]
-        self.assertIn("7400 quad nand chip [74LS00-74HC00]", titles)
+        self.assertIn("7400 Quad Nand Chip [74LS00-74HC00]", titles)
         self.assertEqual(result["sources"][0]["engine"], "study_cards")
 
     def test_no_card_match_is_reported_as_done(self):
@@ -90,7 +90,7 @@ class AgentTests(unittest.TestCase):
 
         result = agent.run("flurble wibble")
 
-        step = next(step for step in result["steps"] if step["label"] == "Study cards check")
+        step = next(step for step in result["steps"] if step["label"] == "Study Cards Check")
         self.assertEqual(step["status"], "done")
         self.assertIn("No cards matched", step["detail"])
 
@@ -294,23 +294,32 @@ class CardRelevanceModelTests(unittest.TestCase):
 
     CASES = [
         # Cards that do answer the question.
-        ("pi pico ADC", "Pi Pico SDK/pi pico ADC.md", True),
-        ("what is the maximum ADC value on the pi pico?", "Pi Pico SDK/pi pico ADC.md", True),
-        ("how do I use a for loop in C?", "C Programing Language/for loop in c.md", True),
+        ("pi pico ADC", "Pi Pico SDK/Pi Pico ADC Example.md", True),
+        ("what is the maximum ADC value on the pi pico?", "Pi Pico SDK/Pi Pico ADC Example.md", True),
+        ("how do I use a for loop in C?", "C Programing Language/Loops in the C Language.md", True),
+        ("what is the pinout for the pi pico?", "Pi Pico Pinout/Raspberry Pi Pico Pin-out.md", True),
         (
             "what does the 74HC00 chip do?",
-            "7400 Series Chips/7400 quad nand chip [74LS00-74HC00].md",
+            "7400 Series Chips/7400 Quad Nand Chip [74LS00-74HC00].md",
             True,
         ),
         # Cards that share keywords but do not answer the question.
-        ("what is the pinout for the pi pico?", "Pi Pico SDK/pi pico ADC.md", False),
-        ("what is the pin-out for the 74HC00 chip?", "Pi Pico SDK/pi pico ADC.md", False),
-        ("what is the pinout for the pi pico?", "C Programing Language/for loop in c.md", False),
-        ("what is the pinout for the pi pico?", "Sample Card Folder/sample card.md", False),
-        ("how do I use a for loop in C?", "Pi Pico SDK/pi pico ADC.md", False),
+        ("what is the pinout for the pi pico?", "Pi Pico SDK/Pi Pico ADC Example.md", False),
+        (
+            "what is the pin-out for the 74HC00 chip?",
+            "Pi Pico SDK/Pi Pico ADC Example.md",
+            False,
+        ),
+        (
+            "what is the pinout for the pi pico?",
+            "C Programing Language/Loops in the C Language.md",
+            False,
+        ),
+        ("what is the pinout for the pi pico?", "Sample Card Folder/Sample Card.md", False),
+        ("how do I use a for loop in C?", "Pi Pico SDK/Pi Pico ADC Example.md", False),
         (
             "how do I use a for loop in C?",
-            "7400 Series Chips/7400 quad nand chip [74LS00-74HC00].md",
+            "7400 Series Chips/7400 Quad Nand Chip [74LS00-74HC00].md",
             False,
         ),
     ]
@@ -355,7 +364,7 @@ class StudyCardSearchTests(unittest.TestCase):
         hits = tools.search_study_cards("what is the pin-out for the 74HC00 chip")
 
         self.assertIn(
-            "7400 quad nand chip [74LS00-74HC00]",
+            "7400 Quad Nand Chip [74LS00-74HC00]",
             [hit.title for hit in hits],
         )
 
@@ -374,6 +383,11 @@ class AppTests(unittest.TestCase):
         response = self.client.get("/")
         self.assertEqual(response.status_code, 200)
         self.assertIn('id="traceTime"', response.get_data(as_text=True))
+
+    def test_index_renders_image_lightbox(self):
+        html = self.client.get("/").get_data(as_text=True)
+        self.assertIn('id="lightboxOverlay"', html)
+        self.assertIn('id="lightboxImage"', html)
 
     def test_health_reports_inactive_before_use(self):
         self.client.post("/api/stop")
