@@ -20,19 +20,10 @@ Get a free Brave Search API key here: https://brave.com/search/api/. Brave Searc
 #### Linux
 Run ```run.sh``` then access [http://127.0.0.1:5000/](http://127.0.0.1:5000/) on your browser.
 
-The script installs llama.cpp if needed, downloads the model, starts the llama.cpp server on `127.0.0.1:5001`, then launches the app. It stops the server it started when the app exits. When it starts the server, the log is saved under `logs/` with a timestamp in the filename.
-
-If you prefer to run llama.cpp yourself, start a server first and then launch the app:
-
-```bash
-llama serve -m models/MiniCPM5-2B-Q4_K_M.gguf --host 127.0.0.1 --port 5001 --ctx-size 6144
-.venv/bin/python app.py
-```
-
-`run.sh` reuses an existing llama.cpp server at the configured address instead of starting a second one.
-
 #### Windows
 Run ```run.bat``` then access [http://127.0.0.1:5000/](http://127.0.0.1:5000/) on your browser.
+
+The scripts installs llama.cpp if needed, downloads the model, starts the llama.cpp server on `127.0.0.1:5001`, then launches the app.  
 
 #### Settings
 On the upper right corner click on settings, add your Brave Search API key then click on save changes. Model and llama.cpp server settings apply after a restart.
