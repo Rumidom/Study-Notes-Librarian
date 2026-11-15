@@ -603,11 +603,6 @@ button {
   transition: 160ms ease;
 }
 
-.ghost-btn:disabled {
-  opacity: 0.55;
-  cursor: default;
-}
-
 .chat-scroll,
 .trace-scroll {
   flex: 1 1 auto;
