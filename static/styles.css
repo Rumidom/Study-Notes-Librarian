@@ -603,6 +603,11 @@ button {
   transition: 160ms ease;
 }
 
+.ghost-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
 .chat-scroll,
 .trace-scroll {
   flex: 1 1 auto;
@@ -953,14 +958,31 @@ button {
 .card-browser-panel {
   flex: 1 1 auto;
   min-height: 0;
-  overflow-y: auto;
-  padding: 16px;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(214, 192, 168, 0.23) transparent;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 16px 16px 0;
 }
 
 .card-browser-panel[hidden] {
   display: none;
+}
+
+.card-browser-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(214, 192, 168, 0.23) transparent;
+}
+
+.card-browser-foot {
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 12px;
+  padding: 12px 0 16px;
+  border-top: 1px solid var(--line);
 }
 
 .card-browser-status {

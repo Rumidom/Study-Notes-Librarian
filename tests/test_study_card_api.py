@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import io
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 
 import app as app_module
@@ -81,6 +83,42 @@ class DeleteValidationTests(StudyCardApiTestCase):
 
     def test_reports_missing_card(self):
         self.assertEqual(self.delete({"path": "Missing.md"}).status_code, 404)
+
+
+class ExportTests(StudyCardApiTestCase):
+    def test_exports_cards_as_zip(self):
+        self.write_card("Note.md")
+        self.write_card("sub/Deep Card.md", "# Deep\n")
+        (self.root / "sub" / "diagram.bin").write_bytes(b"\x00\x01\x02")
+        self.write_card(".hidden/Secret.md")
+
+        response = self.client.get("/api/study-cards/export")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.mimetype, "application/zip")
+        self.assertIn("attachment", response.headers["Content-Disposition"])
+
+        with zipfile.ZipFile(io.BytesIO(response.data)) as bundle:
+            names = set(bundle.namelist())
+            content = bundle.read("study_cards/sub/Deep Card.md")
+
+        self.assertEqual(
+            names,
+            {
+                "study_cards/Note.md",
+                "study_cards/sub/Deep Card.md",
+                "study_cards/sub/diagram.bin",
+            },
+        )
+        self.assertEqual(content, b"# Deep\n")
+
+    def test_export_reports_missing_folder(self):
+        self.root.rmdir()
+
+        response = self.client.get("/api/study-cards/export")
+
+        self.assertEqual(response.status_code, 404)
+        self.assertIn("error", response.get_json())
 
 
 if __name__ == "__main__":

@@ -35,6 +35,7 @@ const elemts = {
   cardBrowserPanel: document.getElementById("cardBrowserPanel"),
   cardBrowserStatus: document.getElementById("cardBrowserStatus"),
   cardBrowserList: document.getElementById("cardBrowserList"),
+  cardsExportBtn: document.getElementById("cardsExportBtn"),
   requestMeta: document.getElementById("requestMeta"),
   modelStatus: document.getElementById("modelStatus"),
   statusText: document.getElementById("statusText"),
@@ -872,6 +873,38 @@ function setCardBrowserStatus(text, kind) {
   elemts.cardBrowserStatus.textContent = text || "";
   elemts.cardBrowserStatus.className = `card-browser-status${kind ? ` ${kind}` : ""}`;
 }
+
+async function exportCards() {
+  const button = elemts.cardsExportBtn;
+  button.disabled = true;
+  setCardBrowserStatus("Preparing export…");
+  try {
+    const response = await fetch("/api/study-cards/export");
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || `Export failed (${response.status}).`);
+    }
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    const disposition = response.headers.get("Content-Disposition") || "";
+    const match = disposition.match(/filename="?([^";]+)"?/i);
+    link.href = url;
+    link.download = match ? match[1] : "study_cards.zip";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+    setCardBrowserStatus("");
+    setTopbarNote(`Exported ${link.download}`, "Downloaded study_cards archive");
+  } catch (error) {
+    setCardBrowserStatus(error.message || "Export failed.", "error");
+  } finally {
+    button.disabled = false;
+  }
+}
+
+elemts.cardsExportBtn.addEventListener("click", exportCards);
 
 async function loadCardBrowser() {
   elemts.cardBrowserList.innerHTML = "";

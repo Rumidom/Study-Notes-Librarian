@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import io
 import os
 import re
+import zipfile
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import quote
@@ -13,7 +15,7 @@ try:
 except ImportError:
     set_key = None
 
-from flask import Flask, jsonify, render_template, request, send_from_directory
+from flask import Flask, jsonify, render_template, request, send_file, send_from_directory
 
 import tools
 from agent import Agent
@@ -246,6 +248,35 @@ def index():
 @app.get("/study_cards/<path:filename>")
 def study_card(filename):
     return send_from_directory(str(tools.STUDY_CARDS_DIR), filename)
+
+
+@app.get("/api/study-cards/export")
+def export_study_cards():
+    root = tools.STUDY_CARDS_DIR
+    if not root.is_dir():
+        return jsonify({"error": "No study_cards folder to export."}), 404
+
+    archive = io.BytesIO()
+    try:
+        with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as bundle:
+            for path in sorted(root.rglob("*")):
+                if not path.is_file() or path.is_symlink():
+                    continue
+                relative = path.relative_to(root)
+                if any(part.startswith(".") for part in relative.parts):
+                    continue
+                bundle.write(path, f"study_cards/{relative.as_posix()}")
+    except OSError as exc:
+        return jsonify({"error": f"Could not export cards: {exc}"}), 500
+
+    archive.seek(0)
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    return send_file(
+        archive,
+        mimetype="application/zip",
+        as_attachment=True,
+        download_name=f"study_cards-{stamp}.zip",
+    )
 
 
 def _card_slug(content) -> str:
