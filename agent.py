@@ -864,15 +864,28 @@ class Agent:
                 "done" if ok else "skipped",
             )
         )
+        pages = sum(1 for hit in sources if (hit.content or "").strip())
+        teasers = sum(
+            1
+            for hit in sources
+            if not (hit.content or "").strip() and (hit.snippet or "").strip()
+        )
+        if ok:
+            if teasers:
+                detail = (
+                    f"Condensed {pages} page(s), "
+                    f"Condensed {teasers} search teasers into short summaries."
+                )
+            else:
+                detail = f"Condensed {pages} page(s) into short summaries."
+        else:
+            detail = "Summaries were unusable; used source excerpts instead."
+
         steps.append(
             _step(
                 "tool",
                 "Summarize sources",
-                (
-                    f"Condensed {len(sources)} source(s) into short summaries."
-                    if ok
-                    else "Summaries were unusable; used source excerpts instead."
-                ),
+                detail,
                 "done" if ok else "skipped",
             )
         )
