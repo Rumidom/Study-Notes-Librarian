@@ -42,3 +42,6 @@ Tests that need the model are skipped when the llama.cpp server is not reachable
 
 ## License
 Study-Notes-Librarian was made using GLM 4.6(Big Pickle) and is MIT licensed
+
+# Support
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/M4M41NQV7I)
