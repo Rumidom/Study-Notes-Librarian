@@ -28,6 +28,17 @@ def model_path() -> Path:
     return Path(os.getenv("MODEL_PATH", str(directory / model_file())))
 
 
+def set_model_path_env_variable(target=None) -> None:
+    """Write a .cmd file that sets MODEL_PATH in the calling cmd shell.
+
+    A child process cannot modify its parent's environment, so the batch
+    script calls the generated file. Quoting and escaping stay in Python.
+    """
+    destination = BASE_DIR / ".model-path.cmd" if target is None else Path(target)
+    value = str(model_path()).replace("%", "%%")
+    destination.write_text(f'set "MODEL_PATH={value}"\n', encoding="utf-8")
+
+
 def model_url() -> str:
     return f"https://huggingface.co/{model_repo()}/resolve/main/{model_file()}"
 

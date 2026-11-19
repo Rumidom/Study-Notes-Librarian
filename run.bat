@@ -38,7 +38,13 @@ if %N_THREADS% LSS 1 set "N_THREADS=1"
 "%VENV_PY%" download_and_check_model.py
 if errorlevel 1 goto :error
 
-for /f "usebackq delims=" %%M in (`"%VENV_PY%" -c "from download_and_check_model import model_path; print(model_path())"`) do set "MODEL_PATH=%%M"
+rem Python writes a .cmd snippet because a child process cannot set the parent shell's variables.
+"%VENV_PY%" -c "from download_and_check_model import set_model_path_env_variable; set_model_path_env_variable()"
+if errorlevel 1 goto :error
+set "MODEL_PATH="
+call ".model-path.cmd"
+del ".model-path.cmd" >nul 2>nul
+if not defined MODEL_PATH goto :error
 
 set "LLAMA_BIN="
 if defined LLAMA_SERVER_BIN if exist "%LLAMA_SERVER_BIN%" set "LLAMA_BIN=%LLAMA_SERVER_BIN%"

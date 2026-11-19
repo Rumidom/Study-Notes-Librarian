@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import json
 import os
+import tempfile
 import threading
 import time
 import unittest
+from unittest.mock import patch
 
 import download_and_check_model
 import tools
@@ -33,6 +35,17 @@ class ModelFileTests(unittest.TestCase):
     def test_ensure_model_returns_existing_file(self):
         path = download_and_check_model.ensure_model()
         self.assertTrue(path.is_file())
+
+    def test_set_model_path_env_variable_writes_cmd_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            target = os.path.join(tmp, "model-path.cmd")
+            with patch.dict(os.environ, {"MODEL_PATH": "C:\\Models\\My Model.gguf"}):
+                download_and_check_model.set_model_path_env_variable(target)
+
+            with open(target, encoding="utf-8") as handle:
+                self.assertEqual(
+                    handle.read(), 'set "MODEL_PATH=C:\\Models\\My Model.gguf"\n'
+                )
 
 
 @requires_server

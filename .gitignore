@@ -6,3 +6,4 @@ llama-server.log
 logs/
 models/*.gguf
 models/*.part
+.model-path.cmd
