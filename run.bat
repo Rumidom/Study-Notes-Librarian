@@ -7,10 +7,8 @@ set "STARTED_SERVER=0"
 
 if not exist "%VENV_PY%" (
   echo Creating virtual environment...
-  where python >nul 2>nul
+  py -3 -m venv .venv
   if errorlevel 1 (
-    py -3 -m venv .venv
-  ) else (
     python -m venv .venv
   )
   if errorlevel 1 goto :error
