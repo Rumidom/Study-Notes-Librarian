@@ -46,7 +46,7 @@ CONFIG_GROUPS = [
                 "key": "MAX_SOURCES",
                 "label": "Max sources",
                 "type": "int",
-                "default": "3",
+                "default": "5",
                 "min": 1,
                 "max": 10,
                 "hint": "Sources cited in the answer; the same number of top pages is read in full.",

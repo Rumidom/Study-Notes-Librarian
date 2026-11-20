@@ -382,6 +382,120 @@ class StudyCardSearchTests(unittest.TestCase):
         )
 
 
+@requires_server
+class SbcDimensionCardTests(unittest.TestCase):
+    """Board names in the SBC dimension tables should retrieve their card.
+
+    These are end-to-end questions: the card must survive both the lexical
+    search and the model's relevance check to show up as a source.
+    """
+
+    CASES = [
+        # Boards listed in Raspberry Pi Zero Dimensions.md
+        (
+            "What are the dimensions of the Radxa Zero 3W?",
+            "Raspberry Pi Zero Dimensions",
+        ),
+        (
+            "What are the dimensions of the Orange Pi Zero 2W?",
+            "Raspberry Pi Zero Dimensions",
+        ),
+        (
+            "What are the dimensions of the MangoPi MQ Pro?",
+            "Raspberry Pi Zero Dimensions",
+        ),
+        (
+            "Does the Radxa Zero 3W use the 65 mm by 30 mm Zero form factor?",
+            "Raspberry Pi Zero Dimensions",
+        ),
+        (
+            "Which boards use the Raspberry Pi Zero form factor?",
+            "Raspberry Pi Zero Dimensions",
+        ),
+        # Boards listed in Raspberry Pi B Dimensions.md
+        (
+            "What are the dimensions of the ASUS Tinker Board 2S?",
+            "Raspberry Pi B Dimensions",
+        ),
+        (
+            "What are the dimensions of the Radxa ROCK 5A?",
+            "Raspberry Pi B Dimensions",
+        ),
+        (
+            "What are the dimensions of the Orange Pi 3B?",
+            "Raspberry Pi B Dimensions",
+        ),
+        (
+            "What are the screw hole dimensions for the ASUS Tinker Board 2S?",
+            "Raspberry Pi B Dimensions",
+        ),
+        (
+            "Which boards in the B form factor table use a Rockchip RK3588S SoC?",
+            "Raspberry Pi B Dimensions",
+        ),
+    ]
+
+    def test_board_questions_find_their_dimension_card(self):
+        agent = Agent()
+        self.addCleanup(agent.close)
+
+        for question, expected_title in self.CASES:
+            with self.subTest(question=question):
+                result = agent.run(question)
+                titles = [source["title"] for source in result["sources"]]
+                self.assertIn(expected_title, titles)
+
+
+@requires_server
+class Timer555CardTests(unittest.TestCase):
+    """Questions about 555 timer modes should retrieve the matching card."""
+
+    CASES = [
+        (
+            "How do I build a 555 timer astable oscillator?",
+            "555 Timer Astable Mode",
+        ),
+        (
+            "What is the timing equation for 555 timer monostable mode?",
+            "555 Timer Monostable Mode",
+        ),
+        (
+            "Which pins does the 555 timer use in bistable mode?",
+            "555 Timer Bistable Mode",
+        ),
+        (
+            "How does the 555 timer work?",
+            "How the 555 Timer Works",
+        ),
+        (
+            "Why is the 555 timer called 555?",
+            "How the 555 Timer Works",
+        ),
+        (
+            "What is the duty cycle of a 555 astable circuit?",
+            "555 Timer Astable Mode",
+        ),
+        (
+            "How can I stop a 555 timer from re-triggering in monostable mode?",
+            "555 Timer Monostable Mode",
+        ),
+        (
+            "Can the 555 timer sink and source output current?",
+            "555 Timer Astable Mode",
+        ),
+    ]
+
+    def test_555_questions_find_their_card(self):
+        agent = Agent()
+        self.addCleanup(agent.close)
+
+        for question, expected_title in self.CASES:
+            with self.subTest(question=question):
+                result = agent.run(question)
+                titles = [source["title"] for source in result["sources"]]
+                self.assertIn(expected_title, titles)
+
+
 class AppTests(unittest.TestCase):
     def setUp(self):
         import app as app_module

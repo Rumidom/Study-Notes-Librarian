@@ -237,8 +237,7 @@ CARD_RELEVANCE_TOOL = {
                     "type": "boolean",
                     "description": (
                         "true only when the card answers the question or contains "
-                        "the requested information; false when it is unrelated or "
-                        "merely shares keywords."
+                        "the requested information; false when it is unrelated."
                     )
                 }
             },
@@ -251,7 +250,7 @@ CARD_RELEVANCE_SYSTEM = (
     "Decide whether the study card answers the user's question or contains the "
     "information the user is after. "
     "Call card_is_relevant with relevant=true only when the card contains the "
-    "specific information requested.  relevant=false otherwise."
+    "information requested.  relevant=false otherwise."
 )
 
 
@@ -506,7 +505,7 @@ class Agent:
                         "role": "user",
                         "content": (
                             f"Question: {message[:400]}\n\n"
-                            f"Card ({hit.title}):\n{card_text[:1600]}"
+                            f"Card ({hit.title}):\n{card_text[:3000]}"
                         ),
                     },
                 ],
@@ -991,7 +990,7 @@ class Agent:
     def run(self, message, history=None, search_study_cards_first=True) -> dict:
         started = time.monotonic()
         self._stop_event.clear()
-        max_sources = _env_int("MAX_SOURCES", 3)
+        max_sources = _env_int("MAX_SOURCES", 5)
         clean_history = self._clean_history(history)
         steps: list[dict] = [_step("input", "Question received", message[:220])]
         tool_trace: list[dict] = []
